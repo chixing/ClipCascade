@@ -20,7 +20,7 @@ services:
 
     # # 🌐 Map port 8080 on the host to port 8080 inside the container.
     ports:
-      - 8080:8080
+      - 8086:8080
 
     # # 🔄 Automatically restart the container if it stops unexpectedly.
     restart: always
