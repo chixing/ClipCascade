@@ -88,6 +88,38 @@ let stunConfig = { iceServers: [] }; // will be loaded from /stun-url
 let CSRF_TOKEN = null;
 let MAX_MESSAGE_SIZE = null; // in MiB
 let CSRF_HEADER_NAME = "X-CSRF-TOKEN";
+const DEVICE_STORAGE_KEY = "clipcascade_device_id";
+const DEVICE_TYPE_WEB = "web";
+let WEB_DEVICE_INFO = null;
+
+function getOrCreateDeviceId() {
+  const existing = localStorage.getItem(DEVICE_STORAGE_KEY);
+  if (existing) {
+    return existing;
+  }
+  let newId = null;
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    newId = window.crypto.randomUUID();
+  } else {
+    newId = `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+  localStorage.setItem(DEVICE_STORAGE_KEY, newId);
+  return newId;
+}
+
+function getWebDeviceInfo() {
+  if (WEB_DEVICE_INFO) {
+    return WEB_DEVICE_INFO;
+  }
+  const deviceId = getOrCreateDeviceId();
+  const osInfo = navigator.userAgent || navigator.platform || "web";
+  WEB_DEVICE_INFO = {
+    deviceId,
+    deviceType: DEVICE_TYPE_WEB,
+    osInfo,
+  };
+  return WEB_DEVICE_INFO;
+}
 
 /* -----------------------------------------
          ============  ON DOCUMENT READY  =========
@@ -470,10 +502,16 @@ function fetchDonationStatus() {
                ----------------------------------------- */
 function connectStomp() {
   const brokerURL = $(SELECTORS.brokerUrlInput).val();
+  const deviceInfo = getWebDeviceInfo();
   stompClient = new StompJs.Client({
     brokerURL,
     heartbeatIncoming: 20000,
     heartbeatOutgoing: 0,
+    connectHeaders: {
+      deviceId: deviceInfo.deviceId,
+      deviceType: deviceInfo.deviceType,
+      osInfo: deviceInfo.osInfo,
+    },
   });
 
   stompClient.onConnect = (frame) => {
@@ -512,9 +550,18 @@ function disconnectStomp() {
 
 function sendTextToServerStomp(textVal) {
   if (!stompClient || !stompClient.connected) return;
+  const deviceInfo = getWebDeviceInfo();
   stompClient.publish({
     destination: ENDPOINTS.websocketSend,
-    body: JSON.stringify({ payload: textVal, type: "text" }),
+    body: JSON.stringify({
+      payload: textVal,
+      type: "text",
+      metadata: {
+        deviceId: deviceInfo.deviceId,
+        deviceType: deviceInfo.deviceType,
+        osInfo: deviceInfo.osInfo,
+      },
+    }),
   });
 }
 

@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="https://www.thymeleaf.org">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClipCascade - Dashboard</title>
+    <link rel="icon" type="image/png" href="/assets/images/logo.png" />
+    <link rel="stylesheet" href="/assets/css/bootstrap@5.3.0.min.css" />
+
+    <style>
+      :root {
+        --primary-color: #4361ee;
+        --success-color: #2ecc71;
+        --warning-color: #f39c12;
+        --danger-color: #e74c3c;
+        --dark-color: #2c3e50;
+        --light-bg: #f8f9fa;
+        --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+      }
+
+      body {
+        padding: 20px;
+        background-color: var(--light-bg);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      .dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+      }
+
+      .dashboard-header h1 {
+        color: var(--dark-color);
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .stats-bar {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      .stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 16px 24px;
+        box-shadow: var(--card-shadow);
+        flex: 1;
+      }
+
+      .stat-card .stat-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .stat-card .stat-value {
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--dark-color);
+      }
+
+      .section-container {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 24px;
+        box-shadow: var(--card-shadow);
+      }
+
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      .section-header h2 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--dark-color);
+        margin: 0;
+      }
+
+      /* Device cards */
+      .devices-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+      }
+
+      .device-card {
+        background: var(--light-bg);
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+        position: relative;
+        border: 2px solid transparent;
+        transition: all 0.2s ease;
+      }
+
+      .device-card:hover {
+        border-color: var(--primary-color);
+      }
+
+      .device-card.online {
+        border-color: var(--success-color);
+      }
+
+      .device-card .device-icon {
+        font-size: 2.5rem;
+        margin-bottom: 8px;
+      }
+
+      .device-card .device-name {
+        font-weight: 600;
+        color: var(--dark-color);
+        margin-bottom: 4px;
+        cursor: pointer;
+      }
+
+      .device-card .device-name:hover {
+        text-decoration: underline;
+      }
+
+      .device-card .device-info {
+        font-size: 0.85rem;
+        color: #6c757d;
+      }
+
+      .device-card .device-status {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #adb5bd;
+      }
+
+      .device-card.online .device-status {
+        background: var(--success-color);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); }
+      }
+
+      /* History table */
+      .history-controls {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+
+      .history-controls .search-box {
+        flex: 1;
+        min-width: 200px;
+      }
+
+      .history-controls select {
+        min-width: 150px;
+      }
+
+      .history-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+
+      .history-table th {
+        background: var(--light-bg);
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        border-bottom: 2px solid #dee2e6;
+      }
+
+      .history-table td {
+        padding: 12px;
+        border-bottom: 1px solid #dee2e6;
+        vertical-align: middle;
+      }
+
+      .history-table tr:hover td {
+        background: var(--light-bg);
+      }
+
+      .history-table .payload-preview {
+        max-width: 400px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+        color: var(--dark-color);
+      }
+
+      .history-table .payload-preview:hover {
+        color: var(--primary-color);
+      }
+
+      .history-table .type-badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+
+      .type-badge.text { background: #e3f2fd; color: #1976d2; }
+      .type-badge.image { background: #f3e5f5; color: #7b1fa2; }
+      .type-badge.file { background: #fff3e0; color: #e65100; }
+      .type-badge.files { background: #fff3e0; color: #e65100; }
+
+      .history-table .actions {
+        white-space: nowrap;
+      }
+
+      .btn-icon {
+        padding: 4px 8px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background 0.2s;
+      }
+
+      .btn-icon:hover {
+        background: var(--light-bg);
+      }
+
+      .pagination-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 16px;
+      }
+
+      /* Modal */
+      .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #0b0f14;
+        opacity: 1;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .modal-backdrop.show {
+        display: flex;
+        opacity: 1;
+        background: #0b0f14;
+        transition: none;
+      }
+
+      .modal-content {
+        background: white;
+        border-radius: 8px;
+        max-width: 800px;
+        max-height: 80vh;
+        width: 90%;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .modal-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .modal-header h3 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+
+      .modal-body {
+        padding: 20px;
+        overflow-y: auto;
+        flex: 1;
+      }
+
+      .modal-body pre {
+        background: var(--light-bg);
+        padding: 16px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+
+      .modal-body img {
+        max-width: 100%;
+        height: auto;
+      }
+
+      .modal-footer {
+        padding: 12px 20px;
+        border-top: 1px solid #dee2e6;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .btn-close-modal {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+      }
+
+      /* Empty state */
+      .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: #6c757d;
+      }
+
+      .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 16px;
+      }
+
+      /* Loading */
+      .loading {
+        text-align: center;
+        padding: 40px;
+        color: #6c757d;
+      }
+
+      .loading::after {
+        content: '...';
+        animation: dots 1.5s steps(4, end) infinite;
+      }
+
+      @keyframes dots {
+        0%, 20% { content: ''; }
+        40% { content: '.'; }
+        60% { content: '..'; }
+        80%, 100% { content: '...'; }
+      }
+
+      .bulk-actions {
+        display: none;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        background: #e3f2fd;
+        border-radius: 4px;
+        margin-bottom: 16px;
+      }
+
+      .bulk-actions.show {
+        display: flex;
+      }
+
+      .nav-link-custom {
+        color: #6c757d;
+        text-decoration: none;
+      }
+
+      .nav-link-custom:hover {
+        color: var(--primary-color);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <!-- Header -->
+      <div class="dashboard-header">
+        <h1>ClipCascade Dashboard</h1>
+        <div>
+          <a href="/admin/advance" class="nav-link-custom me-3">Advanced Settings</a>
+          <a href="/logout" class="btn btn-outline-secondary btn-sm">Logout</a>
+        </div>
+      </div>
+
+      <!-- Stats Bar -->
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-label">Online Devices</div>
+          <div class="stat-value" id="stat-online-devices">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Devices</div>
+          <div class="stat-value" id="stat-total-devices">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Clipboard Items</div>
+          <div class="stat-value" id="stat-total-items">-</div>
+        </div>
+      </div>
+
+      <!-- Connected Devices -->
+      <div class="section-container">
+        <div class="section-header">
+          <h2>Connected Devices</h2>
+          <button class="btn btn-sm btn-outline-primary" onclick="refreshDevices()">
+            Refresh
+          </button>
+        </div>
+        <div id="devices-container" class="devices-grid">
+          <div class="loading">Loading devices</div>
+        </div>
+      </div>
+
+      <!-- Clipboard History -->
+      <div class="section-container">
+        <div class="section-header">
+          <h2>Clipboard History</h2>
+        </div>
+
+        <!-- Info banner about encryption -->
+        <div class="alert alert-info" style="margin-bottom: 16px; padding: 12px; border-radius: 4px; background: #e7f3ff; border: 1px solid #b6d4fe; color: #084298;">
+          <strong>Note:</strong> If your devices use end-to-end encryption (E2E), clipboard content will appear as encrypted text.
+          Disable E2E on your devices to store readable content, or use this view to track clipboard activity timestamps.
+        </div>
+
+        <!-- Controls -->
+        <div class="history-controls">
+          <input type="text" id="search-input" class="form-control search-box"
+                 placeholder="Search clipboard content..." onkeyup="debounceSearch()">
+          <select id="filter-device" class="form-select" onchange="loadHistory()">
+            <option value="">All Devices</option>
+          </select>
+          <select id="filter-type" class="form-select" onchange="loadHistory()">
+            <option value="">All Types</option>
+            <option value="text">Text</option>
+            <option value="image">Image</option>
+            <option value="files">File</option>
+          </select>
+          <button class="btn btn-outline-danger" onclick="showDeleteModal()">
+            Delete...
+          </button>
+        </div>
+
+        <!-- Bulk Actions -->
+        <div class="bulk-actions" id="bulk-actions">
+          <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
+          <span id="selected-count">0 selected</span>
+          <button class="btn btn-sm btn-danger" onclick="deleteSelected()">Delete Selected</button>
+        </div>
+
+        <!-- History Table -->
+        <div class="table-responsive">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;"><input type="checkbox" id="header-checkbox" onchange="toggleSelectAll()"></th>
+                <th>Device</th>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Content</th>
+                <th>Size</th>
+                <th style="width: 100px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody">
+              <tr><td colspan="7" class="loading">Loading history</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-controls">
+          <span id="pagination-info">Showing 0 items</span>
+          <div>
+            <button class="btn btn-sm btn-outline-secondary" id="btn-prev" onclick="prevPage()" disabled>Previous</button>
+            <button class="btn btn-sm btn-outline-secondary" id="btn-next" onclick="nextPage()">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- View Content Modal -->
+    <div class="modal-backdrop" id="content-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modal-title">Clipboard Content</h3>
+          <button class="btn-close-modal" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-body">
+          <pre id="modal-text-content"></pre>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-primary" id="btn-download" onclick="downloadCurrent()" style="display: none;">Download</button>
+          <button class="btn btn-primary" onclick="copyToClipboard()">Copy to Clipboard</button>
+          <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div class="modal-backdrop" id="delete-modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h3>Delete History</h3>
+          <button class="btn-close-modal" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>Choose how to delete clipboard history:</p>
+          <div class="mb-3">
+            <label class="form-label">Delete items older than:</label>
+            <select id="delete-days" class="form-select">
+              <option value="">Select...</option>
+              <option value="1">1 day</option>
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
+              <option value="90">90 days</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Or delete by device:</label>
+            <select id="delete-device" class="form-select">
+              <option value="">Select device...</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-danger" onclick="executeBulkDelete()">Delete</button>
+          <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rename Device Modal -->
+    <div class="modal-backdrop" id="rename-modal">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <h3>Rename Device</h3>
+          <button class="btn-close-modal" onclick="closeRenameModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="rename-device-id">
+          <div class="mb-3">
+            <label class="form-label">Device Name:</label>
+            <input type="text" id="rename-input" class="form-control" placeholder="Enter friendly name">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="saveDeviceName()">Save</button>
+          <button class="btn btn-secondary" onclick="closeRenameModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/assets/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // State
+      let currentPage = 0;
+      let pageSize = 50;
+      let totalItems = 0;
+      let devices = [];
+      const ACTIVE_WINDOW_SECONDS = 60 * 60;
+      let selectedIds = new Set();
+      let currentViewItem = null;
+      let searchTimeout = null;
+      let csrfToken = '';
+
+      // API Endpoints
+      const API = {
+        devices: '/admin/devices',
+        history: '/admin/clipboard-history',
+        historyStats: '/admin/clipboard-history/stats',
+        csrfToken: '/csrf-token'
+      };
+
+      // Fetch CSRF token
+      async function fetchCsrfToken() {
+        try {
+          const response = await fetch(API.csrfToken);
+          const data = await response.json();
+          csrfToken = data.token;
+        } catch (e) {
+          console.error('Failed to fetch CSRF token:', e);
+        }
+      }
+
+      // Fetch with error handling
+      async function fetchAPI(url, options = {}) {
+        try {
+          if (options.method && options.method !== 'GET') {
+            options.headers = {
+              ...options.headers,
+              'X-CSRF-TOKEN': csrfToken
+            };
+          }
+          const response = await fetch(url, options);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        } catch (e) {
+          console.error('API Error:', e);
+          throw e;
+        }
+      }
+
+      // Format epoch to readable time
+      function formatTime(epoch) {
+        if (!epoch) return '-';
+        const date = new Date(epoch * 1000);
+        const now = new Date();
+        const diff = (now - date) / 1000;
+
+        if (diff < 60) return 'Just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      }
+
+      // Format bytes
+      function formatSize(bytes) {
+        if (!bytes) return '-';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      // Get device icon
+      function getDeviceIcon(type) {
+        const icons = {
+          'desktop': '&#x1F5A5;',
+          'mobile': '&#x1F4F1;',
+          'web': '&#x1F310;',
+          'p2p': '&#x1F517;'
+        };
+        return icons[type] || '&#x1F4BB;';
+      }
+
+      // Load stats
+      async function loadStats() {
+        try {
+          const stats = await fetchAPI(API.historyStats);
+          document.getElementById('stat-online-devices').textContent = stats.onlineDevices;
+          document.getElementById('stat-total-devices').textContent = stats.totalDevices;
+          document.getElementById('stat-total-items').textContent = stats.totalItems;
+          totalItems = stats.totalItems;
+        } catch (e) {
+          console.error('Failed to load stats:', e);
+        }
+      }
+
+      // Load devices
+      async function loadDevices() {
+        try {
+          devices = await fetchAPI(API.devices);
+          renderDevices();
+          populateDeviceFilters();
+        } catch (e) {
+          document.getElementById('devices-container').innerHTML =
+            '<div class="empty-state"><div class="empty-state-icon">&#x26A0;</div>Failed to load devices</div>';
+        }
+      }
+
+      function renderDevices() {
+        const container = document.getElementById('devices-container');
+        const activeDevices = getActiveDevices();
+
+        if (!activeDevices.length) {
+          container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#x1F4F1;</div>No devices yet. Connect a device to get started.</div>';
+          return;
+        }
+
+        container.innerHTML = activeDevices.map(device => `
+          <div class="device-card ${device.online ? 'online' : ''}">
+            <div class="device-status"></div>
+            <div class="device-icon">${getDeviceIcon(device.deviceType)}</div>
+            <div class="device-name" onclick="showRenameModal('${device.id}', '${escapeHtml(device.friendlyName || '')}')">${escapeHtml(device.displayName)}</div>
+            <div class="device-info">${device.osInfo || device.deviceType || 'Unknown'}</div>
+            <div class="device-info">${device.online ? 'Online' : 'Last seen ' + formatTime(device.lastSeen)}</div>
+          </div>
+        `).join('');
+      }
+
+      function getActiveDevices() {
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        return devices.filter(device => {
+          if (device.online) {
+            return true;
+          }
+          if (!device.lastSeen) {
+            return false;
+          }
+          return (nowSeconds - device.lastSeen) <= ACTIVE_WINDOW_SECONDS;
+        });
+      }
+
+      function populateDeviceFilters() {
+        const filterDevice = document.getElementById('filter-device');
+        const deleteDevice = document.getElementById('delete-device');
+
+        const activeDevices = getActiveDevices();
+        const options = activeDevices.map(d =>
+          `<option value="${d.id}">${escapeHtml(d.displayName)}</option>`
+        ).join('');
+
+        filterDevice.innerHTML = '<option value="">All Devices</option>' + options;
+        deleteDevice.innerHTML = '<option value="">Select device...</option>' + options;
+      }
+
+      // Load history
+      async function loadHistory() {
+        const tbody = document.getElementById('history-tbody');
+        tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading history</td></tr>';
+
+        try {
+          const params = new URLSearchParams({
+            page: currentPage,
+            size: pageSize
+          });
+
+          const search = document.getElementById('search-input').value;
+          const deviceId = document.getElementById('filter-device').value;
+          const type = document.getElementById('filter-type').value;
+
+          if (search) params.append('q', search);
+          if (deviceId) params.append('deviceId', deviceId);
+          if (type) params.append('type', type);
+
+          const data = await fetchAPI(`${API.history}?${params}`);
+          renderHistory(data);
+        } catch (e) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load history</td></tr>';
+        }
+      }
+
+      function renderHistory(data) {
+        const tbody = document.getElementById('history-tbody');
+        const items = data.content || [];
+
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-icon">&#x1F4CB;</div>No clipboard history yet</td></tr>';
+          updatePagination(data);
+          return;
+        }
+
+        tbody.innerHTML = items.map(item => `
+          <tr data-id="${item.id}">
+            <td><input type="checkbox" class="item-checkbox" value="${item.id}" onchange="updateSelection()"></td>
+            <td>${escapeHtml(item.deviceName || 'Unknown')}</td>
+            <td>${formatTime(item.createdAt)}</td>
+            <td><span class="type-badge ${item.payloadType}">${item.payloadType}</span></td>
+            <td class="payload-preview" onclick="viewItem(${item.id})">${escapeHtml(item.payloadPreview || '')}</td>
+            <td>${formatSize(item.payloadSize)}</td>
+            <td class="actions">
+              <button class="btn-icon" onclick="viewItem(${item.id})" title="View">&#x1F441;</button>
+              <button class="btn-icon" onclick="copyItem(${item.id})" title="Copy">&#x1F4CB;</button>
+              <button class="btn-icon" onclick="deleteItem(${item.id})" title="Delete">&#x1F5D1;</button>
+            </td>
+          </tr>
+        `).join('');
+
+        updatePagination(data);
+      }
+
+      function updatePagination(data) {
+        const info = document.getElementById('pagination-info');
+        const totalElements = data.totalElements || 0;
+        const start = currentPage * pageSize + 1;
+        const end = Math.min((currentPage + 1) * pageSize, totalElements);
+
+        info.textContent = totalElements > 0
+          ? `Showing ${start}-${end} of ${totalElements} items`
+          : 'No items';
+
+        document.getElementById('btn-prev').disabled = currentPage === 0;
+        document.getElementById('btn-next').disabled = !data.hasNext;
+      }
+
+      function prevPage() {
+        if (currentPage > 0) {
+          currentPage--;
+          loadHistory();
+        }
+      }
+
+      function nextPage() {
+        currentPage++;
+        loadHistory();
+      }
+
+      function debounceSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          currentPage = 0;
+          loadHistory();
+        }, 300);
+      }
+
+      // Selection
+      function updateSelection() {
+        const checkboxes = document.querySelectorAll('.item-checkbox');
+        selectedIds.clear();
+        checkboxes.forEach(cb => {
+          if (cb.checked) selectedIds.add(parseInt(cb.value));
+        });
+
+        const bulkActions = document.getElementById('bulk-actions');
+        const count = document.getElementById('selected-count');
+
+        if (selectedIds.size > 0) {
+          bulkActions.classList.add('show');
+          count.textContent = `${selectedIds.size} selected`;
+        } else {
+          bulkActions.classList.remove('show');
+        }
+
+        document.getElementById('header-checkbox').checked =
+          checkboxes.length > 0 && selectedIds.size === checkboxes.length;
+      }
+
+      function toggleSelectAll() {
+        const checkboxes = document.querySelectorAll('.item-checkbox');
+        const selectAll = document.getElementById('header-checkbox').checked;
+
+        checkboxes.forEach(cb => cb.checked = selectAll);
+        updateSelection();
+      }
+
+      // View item
+      async function viewItem(id) {
+        try {
+          const item = await fetchAPI(`${API.history}/${id}`);
+          currentViewItem = item;
+
+          const modal = document.getElementById('content-modal');
+          const title = document.getElementById('modal-title');
+          const body = document.getElementById('modal-body');
+          const downloadBtn = document.getElementById('btn-download');
+          const payloadType = (item.payloadType || '').toLowerCase();
+
+          title.textContent = `${payloadType || 'unknown'} - ${formatTime(item.createdAt)}`;
+
+          if (payloadType === 'image') {
+            body.innerHTML = `<img src="data:image/png;base64,${item.payload}" alt="Clipboard image">`;
+            downloadBtn.style.display = 'inline-block';
+          } else if (payloadType === 'files') {
+            renderFilesList(body, item);
+            downloadBtn.style.display = 'none';
+          } else if (payloadType !== 'text' || looksLikeBase64(item.payload || '')) {
+            body.innerHTML = `<div>File preview not available. Use Download to save the file.</div>`;
+            downloadBtn.style.display = 'inline-block';
+          } else {
+            body.innerHTML = `<pre id="modal-text-content">${escapeHtml(item.payload || '')}</pre>`;
+            downloadBtn.style.display = 'none';
+          }
+
+          modal.classList.add('show');
+        } catch (e) {
+          alert('Failed to load item');
+        }
+      }
+
+      function closeModal() {
+        document.getElementById('content-modal').classList.remove('show');
+        currentViewItem = null;
+      }
+
+      function downloadCurrent() {
+        if (!currentViewItem) return;
+        const url = `${API.history}/${currentViewItem.id}/download`;
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = '';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      function looksLikeBase64(value) {
+        if (!value || value.length < 200) return false;
+        if (value.startsWith('data:')) return true;
+        if (value.length % 4 !== 0) return false;
+        return /^[A-Za-z0-9+/=\r\n]+$/.test(value);
+      }
+
+      function renderFilesList(container, item) {
+        try {
+          const files = JSON.parse(item.payload || '{}');
+          const names = Object.keys(files);
+          if (!names.length) {
+            container.innerHTML = `<div>No files found in payload.</div>`;
+            return;
+          }
+          const listHtml = names.map(name => {
+            const size = estimateBase64Size(files[name]);
+            const sizeText = size ? formatSize(size) : '-';
+            const url = `${API.history}/${item.id}/download?file=${encodeURIComponent(name)}`;
+            return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 0; border-bottom:1px solid #eee;">
+              <div style="flex:1; min-width:0;"><strong>${escapeHtml(name)}</strong> <span style="color:#6c757d;">(${sizeText})</span></div>
+              <a class="btn btn-sm btn-outline-primary" href="${url}">Download</a>
+            </div>`;
+          }).join('');
+          container.innerHTML = `<div>${listHtml}</div>`;
+        } catch (e) {
+          container.innerHTML = `<div>Unable to parse file list. Use Download to save the file.</div>`;
+        }
+      }
+
+      function estimateBase64Size(base64) {
+        if (!base64) return 0;
+        const cleaned = base64.replace(/\s/g, '');
+        const padding = (cleaned.match(/=/g) || []).length;
+        return Math.max(0, (cleaned.length * 3) / 4 - padding);
+      }
+
+      function copyToClipboard() {
+        if (!currentViewItem) return;
+
+        if (currentViewItem.payloadType === 'text') {
+          navigator.clipboard.writeText(currentViewItem.payload)
+            .then(() => alert('Copied to clipboard!'))
+            .catch(() => alert('Failed to copy'));
+        } else {
+          alert('Cannot copy non-text content directly');
+        }
+      }
+
+      async function copyItem(id) {
+        try {
+          const item = await fetchAPI(`${API.history}/${id}`);
+          if (item.payloadType === 'text') {
+            await navigator.clipboard.writeText(item.payload);
+            alert('Copied to clipboard!');
+          } else {
+            alert('Cannot copy non-text content directly');
+          }
+        } catch (e) {
+          alert('Failed to copy');
+        }
+      }
+
+      // Delete
+      async function deleteItem(id) {
+        if (!confirm('Delete this item?')) return;
+
+        try {
+          await fetchAPI(`${API.history}?ids=${id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          loadHistory();
+          loadStats();
+        } catch (e) {
+          alert('Failed to delete');
+        }
+      }
+
+      async function deleteSelected() {
+        if (!selectedIds.size) return;
+        if (!confirm(`Delete ${selectedIds.size} items?`)) return;
+
+        try {
+          const ids = Array.from(selectedIds).join(',');
+          await fetchAPI(`${API.history}?ids=${ids}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          selectedIds.clear();
+          loadHistory();
+          loadStats();
+        } catch (e) {
+          alert('Failed to delete');
+        }
+      }
+
+      function showDeleteModal() {
+        document.getElementById('delete-modal').classList.add('show');
+      }
+
+      function closeDeleteModal() {
+        document.getElementById('delete-modal').classList.remove('show');
+        document.getElementById('delete-days').value = '';
+        document.getElementById('delete-device').value = '';
+      }
+
+      async function executeBulkDelete() {
+        const days = document.getElementById('delete-days').value;
+        const deviceId = document.getElementById('delete-device').value;
+
+        if (!days && !deviceId) {
+          alert('Please select a deletion criteria');
+          return;
+        }
+
+        const params = new URLSearchParams();
+        if (days) params.append('olderThanDays', days);
+        if (deviceId) params.append('deviceId', deviceId);
+
+        if (!confirm('Are you sure you want to delete these items?')) return;
+
+        try {
+          const result = await fetchAPI(`${API.history}?${params}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          alert(`Deleted ${result.deleted} items`);
+          closeDeleteModal();
+          loadHistory();
+          loadStats();
+        } catch (e) {
+          alert('Failed to delete');
+        }
+      }
+
+      // Rename device
+      function showRenameModal(deviceId, currentName) {
+        document.getElementById('rename-device-id').value = deviceId;
+        document.getElementById('rename-input').value = currentName;
+        document.getElementById('rename-modal').classList.add('show');
+      }
+
+      function closeRenameModal() {
+        document.getElementById('rename-modal').classList.remove('show');
+      }
+
+      async function saveDeviceName() {
+        const deviceId = document.getElementById('rename-device-id').value;
+        const friendlyName = document.getElementById('rename-input').value;
+
+        try {
+          await fetchAPI(`${API.devices}/${encodeURIComponent(deviceId)}/name`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ friendlyName })
+          });
+          closeRenameModal();
+          loadDevices();
+        } catch (e) {
+          alert('Failed to rename device');
+        }
+      }
+
+      // Refresh
+      function refreshDevices() {
+        loadDevices();
+        loadStats();
+      }
+
+      // Escape HTML
+      function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Initialize
+      document.addEventListener('DOMContentLoaded', async () => {
+        await fetchCsrfToken();
+        loadStats();
+        loadDevices();
+        loadHistory();
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+          loadStats();
+          loadDevices();
+        }, 30000);
+      });
+
+      // Close modals on backdrop click
+      document.querySelectorAll('.modal-backdrop').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.classList.remove('show');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

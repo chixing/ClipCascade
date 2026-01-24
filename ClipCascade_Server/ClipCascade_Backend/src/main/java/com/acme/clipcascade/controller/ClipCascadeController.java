@@ -3,13 +3,22 @@ package com.acme.clipcascade.controller;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.Collections;
+import java.util.List;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Base64;
+import java.nio.charset.StandardCharsets;
+import java.net.URLConnection;
+
+import org.springframework.data.domain.Page;
 
 import javax.imageio.ImageIO;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,10 +35,14 @@ import com.acme.clipcascade.config.ClipCascadeProperties;
 import com.acme.clipcascade.constants.RoleConstants;
 import com.acme.clipcascade.constants.ServerConstants;
 import com.acme.clipcascade.model.ClipboardData;
+import com.acme.clipcascade.model.ClipboardHistory;
+import com.acme.clipcascade.model.Device;
 import com.acme.clipcascade.model.UserPrincipal;
 import com.acme.clipcascade.model.Users;
 import com.acme.clipcascade.service.BruteForceProtectionService;
 import com.acme.clipcascade.service.CaptchaService;
+import com.acme.clipcascade.service.ClipboardHistoryService;
+import com.acme.clipcascade.service.DeviceService;
 import com.acme.clipcascade.service.DonationService;
 import com.acme.clipcascade.service.FacadeUserService;
 import com.acme.clipcascade.service.SessionService;
@@ -52,7 +65,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @Controller
 public class ClipCascadeController {
@@ -67,6 +82,8 @@ public class ClipCascadeController {
     private final BruteForceProtectionService bruteForceProtectionService;
     private final WebSocketStatsService webSocketStatsService;
     private final DonationService donationService;
+    private final DeviceService deviceService;
+    private final ClipboardHistoryService clipboardHistoryService;
 
     public ClipCascadeController(
             ClipCascadeProperties clipCascadeProperties,
@@ -78,7 +95,9 @@ public class ClipCascadeController {
             SessionService sessionService,
             BruteForceProtectionService bruteForceProtectionService,
             WebSocketStatsService webSocketStatsService,
-            DonationService donationService) {
+            DonationService donationService,
+            DeviceService deviceService,
+            ClipboardHistoryService clipboardHistoryService) {
 
         this.clipCascadeProperties = clipCascadeProperties;
         this.facadeUserService = facadeUserService;
@@ -90,6 +109,8 @@ public class ClipCascadeController {
         this.bruteForceProtectionService = bruteForceProtectionService;
         this.webSocketStatsService = webSocketStatsService;
         this.donationService = donationService;
+        this.deviceService = deviceService;
+        this.clipboardHistoryService = clipboardHistoryService;
     }
 
     @PostConstruct
@@ -169,7 +190,8 @@ public class ClipCascadeController {
     @MessageMapping("/cliptext")
     public void sendPrivateMessage(
             Principal principal,
-            ClipboardData clipboardData) {
+            ClipboardData clipboardData,
+            org.springframework.messaging.simp.SimpMessageHeaderAccessor headerAccessor) {
 
         if (clipCascadeProperties.isP2pEnabled()) {
             return;
@@ -185,6 +207,58 @@ public class ClipCascadeController {
                 clipboardData.getPayload(),
                 (clipboardData.getType() == null) ? "text" : clipboardData.getType(),
                 clipboardData.getMetadata());
+
+        // Record clipboard history
+        try {
+            String deviceId = null;
+            String deviceType = null;
+            String osInfo = null;
+            Map<String, Object> metadata = clipboardData.getMetadata();
+
+            // First try to get deviceId from metadata (sent by client)
+            if (metadata != null && metadata.containsKey("deviceId")) {
+                Object deviceIdObj = metadata.get("deviceId");
+                deviceId = deviceIdObj != null ? deviceIdObj.toString() : null;
+            }
+            if (metadata != null && metadata.containsKey("deviceType")) {
+                Object deviceTypeObj = metadata.get("deviceType");
+                deviceType = deviceTypeObj != null ? deviceTypeObj.toString() : null;
+            }
+            if (metadata != null && metadata.containsKey("osInfo")) {
+                Object osInfoObj = metadata.get("osInfo");
+                osInfo = osInfoObj != null ? osInfoObj.toString() : null;
+            }
+            if (deviceType != null && deviceType.length() > 50) {
+                deviceType = deviceType.substring(0, 50);
+            }
+            if (osInfo != null && osInfo.length() > 100) {
+                osInfo = osInfo.substring(0, 100);
+            }
+
+            // If no deviceId in metadata, try to get it from the WebSocket session
+            if (deviceId == null || deviceId.isEmpty()) {
+                String sessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
+                if (sessionId != null) {
+                    String mappedDeviceId = deviceService.getDeviceIdForSession(sessionId);
+                    deviceId = (mappedDeviceId != null && !mappedDeviceId.isEmpty()) ? mappedDeviceId : sessionId;
+                }
+            }
+
+            String sessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
+            if (deviceId != null && !deviceId.isEmpty()) {
+                deviceService.registerDevice(deviceId, userPrincipal.getUsername(), deviceType, osInfo);
+                if (sessionId != null) {
+                    deviceService.markDeviceOnline(deviceId, sessionId);
+                }
+            }
+
+            clipboardHistoryService.recordClipboard(
+                    userPrincipal.getUsername(),
+                    deviceId,
+                    messageToSend);
+        } catch (Exception e) {
+            // Don't fail the message relay - history recording is non-critical
+        }
 
         /**
          * Send the message to the user's specific queue:
@@ -599,6 +673,315 @@ public class ClipCascadeController {
                         "User unlocked successfully",
                         "Invalid user or operation failed"),
                 "Forbidden");
+    }
+
+    // ==================== Device Endpoints ====================
+
+    @GetMapping("/admin/devices")
+    public ResponseEntity<?> getDevices(@AuthenticationPrincipal UserPrincipal userPrincipal) {
+        return ResponseEntityUtil.conditionalExecuteOrError(
+                userPrincipal.isAdmin(),
+                () -> ResponseEntityUtil.executeWithResponse(
+                        () -> deviceService.getDevicesForUser(userPrincipal.getUsername())),
+                "Forbidden");
+    }
+
+    @PutMapping("/admin/devices/{deviceId}/name")
+    public ResponseEntity<?> updateDeviceName(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable String deviceId,
+            @RequestBody Map<String, String> payload) {
+
+        return ResponseEntityUtil.conditionalExecuteOrError(
+                userPrincipal.isAdmin(),
+                () -> ResponseEntityUtil.buildResponse(
+                        deviceService.updateFriendlyName(
+                                deviceId,
+                                userPrincipal.getUsername(),
+                                payload.get("friendlyName")),
+                        "Device name updated successfully",
+                        "Failed to update device name"),
+                "Forbidden");
+    }
+
+    // ==================== Clipboard History Endpoints ====================
+
+    @GetMapping("/admin/clipboard-history")
+    public ResponseEntity<?> getClipboardHistory(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @RequestParam(required = false) String deviceId,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) Long from,
+            @RequestParam(required = false) Long to,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        // Normalize empty strings to null
+        final String normalizedDeviceId = (deviceId != null && !deviceId.trim().isEmpty()) ? deviceId.trim() : null;
+        String normalizedType = (type != null && !type.trim().isEmpty()) ? type.trim() : null;
+        if ("file".equalsIgnoreCase(normalizedType)) {
+            normalizedType = "files";
+        }
+        final String normalizedTypeFinal = normalizedType;
+        final String normalizedSearch = (q != null && !q.trim().isEmpty()) ? q.trim() : null;
+
+        return ResponseEntityUtil.conditionalExecuteOrError(
+                userPrincipal.isAdmin(),
+                () -> ResponseEntityUtil.executeWithResponse(
+                        () -> clipboardHistoryService.searchHistory(
+                                userPrincipal.getUsername(),
+                                normalizedDeviceId,
+                                normalizedTypeFinal,
+                                from,
+                                to,
+                                normalizedSearch,
+                                page,
+                                size)),
+                "Forbidden");
+    }
+
+    @GetMapping("/admin/clipboard-history/{id}")
+    public ResponseEntity<?> getClipboardHistoryItem(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable Long id) {
+
+        return ResponseEntityUtil.conditionalExecuteOrError(
+                userPrincipal.isAdmin(),
+                () -> ResponseEntityUtil.executeWithResponse(
+                        () -> clipboardHistoryService.getHistoryItem(id, userPrincipal.getUsername())),
+                "Forbidden");
+    }
+
+    @GetMapping("/admin/clipboard-history/{id}/download")
+    public ResponseEntity<byte[]> downloadClipboardHistoryItem(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable Long id,
+            @RequestParam(required = false) String file) {
+
+        if (!userPrincipal.isAdmin()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        ClipboardHistory item = clipboardHistoryService.getHistoryItem(id, userPrincipal.getUsername());
+        if (item == null || item.getPayload() == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        DecodedPayload decoded = decodePayload(item, file);
+        if (decoded.data == null || decoded.data.length == 0) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(decoded.contentType));
+        headers.setContentDispositionFormData("attachment", decoded.filename);
+        return new ResponseEntity<>(decoded.data, headers, HttpStatus.OK);
+    }
+
+    @DeleteMapping("/admin/clipboard-history")
+    @Transactional
+    public ResponseEntity<?> deleteClipboardHistory(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @RequestParam(required = false) List<Long> ids,
+            @RequestParam(required = false) String deviceId,
+            @RequestParam(required = false) Long olderThanDays) {
+
+        return ResponseEntityUtil.conditionalExecuteOrError(
+                userPrincipal.isAdmin(),
+                () -> {
+                    int deleted = 0;
+                    String username = userPrincipal.getUsername();
+
+                    if (ids != null && !ids.isEmpty()) {
+                        deleted = clipboardHistoryService.deleteByIds(ids, username);
+                    } else if (deviceId != null) {
+                        deleted = clipboardHistoryService.deleteByDevice(username, deviceId);
+                    } else if (olderThanDays != null) {
+                        long cutoffTime = (System.currentTimeMillis() / 1000) - (olderThanDays * 24 * 60 * 60);
+                        deleted = clipboardHistoryService.deleteOlderThan(username, cutoffTime);
+                    }
+
+                    final int deletedCount = deleted;
+                    return ResponseEntityUtil.executeWithResponse(
+                            () -> Collections.singletonMap("deleted", deletedCount));
+                },
+                "Forbidden");
+    }
+
+    @GetMapping("/admin/clipboard-history/stats")
+    public ResponseEntity<?> getClipboardHistoryStats(@AuthenticationPrincipal UserPrincipal userPrincipal) {
+        return ResponseEntityUtil.conditionalExecuteOrError(
+                userPrincipal.isAdmin(),
+                () -> ResponseEntityUtil.executeWithResponse(
+                        () -> {
+                            Map<String, Object> stats = new HashMap<>();
+                            stats.put("totalItems", clipboardHistoryService.countForUser(userPrincipal.getUsername()));
+                            stats.put("onlineDevices", deviceService.getOnlineDeviceCount());
+                            stats.put("totalDevices", deviceService.getTotalDeviceCount());
+                            return stats;
+                        }),
+                "Forbidden");
+    }
+
+    @GetMapping("/admin/dashboard")
+    public String dashboard(@AuthenticationPrincipal UserPrincipal userPrincipal) {
+        if (userPrincipal.isAdmin()) {
+            return "dashboard";
+        } else {
+            return "redirect:/";
+        }
+    }
+
+    private static final class DecodedPayload {
+        private final byte[] data;
+        private final String contentType;
+        private final String filename;
+
+        private DecodedPayload(byte[] data, String contentType, String filename) {
+            this.data = data;
+            this.contentType = contentType;
+            this.filename = filename;
+        }
+    }
+
+    private DecodedPayload decodePayload(ClipboardHistory item, String fileName) {
+        String payload = item.getPayload();
+        String payloadType = item.getPayloadType() != null ? item.getPayloadType().toLowerCase() : "file";
+        String contentType = "application/octet-stream";
+        String extension = "bin";
+
+        if ("text".equals(payloadType)) {
+            if (looksLikeBase64(payload)) {
+                byte[] decoded = safeBase64Decode(payload);
+                return new DecodedPayload(decoded, contentType,
+                        "clipboard-" + item.getId() + "." + extension);
+            }
+            contentType = "text/plain";
+            extension = "txt";
+            return new DecodedPayload(payload.getBytes(StandardCharsets.UTF_8), contentType,
+                    "clipboard-" + item.getId() + "." + extension);
+        }
+
+        if ("files".equals(payloadType) || "file".equals(payloadType)) {
+            DecodedPayload filesPayload = decodeFilesPayload(item, fileName);
+            if (filesPayload != null) {
+                return filesPayload;
+            }
+            return new DecodedPayload(new byte[0], contentType, "clipboard-" + item.getId() + ".bin");
+        }
+
+        if (payload.startsWith("data:")) {
+            int commaIndex = payload.indexOf(',');
+            if (commaIndex > 0) {
+                String meta = payload.substring(5, commaIndex);
+                String dataPart = payload.substring(commaIndex + 1);
+                boolean isBase64 = meta.contains(";base64");
+                String mime = meta.split(";")[0];
+                if (mime != null && !mime.isBlank()) {
+                    contentType = mime;
+                    extension = extensionFromContentType(mime, payloadType);
+                } else {
+                    extension = defaultExtension(payloadType);
+                }
+                if (isBase64) {
+                    byte[] decoded = safeBase64Decode(dataPart);
+                    return new DecodedPayload(decoded, contentType, "clipboard-" + item.getId() + "." + extension);
+                }
+                return new DecodedPayload(dataPart.getBytes(StandardCharsets.UTF_8), contentType,
+                        "clipboard-" + item.getId() + "." + extension);
+            }
+        }
+
+        if ("image".equals(payloadType)) {
+            contentType = "image/png";
+            extension = "png";
+        } else {
+            extension = defaultExtension(payloadType);
+        }
+
+        byte[] decoded = safeBase64Decode(payload);
+        return new DecodedPayload(decoded, contentType, "clipboard-" + item.getId() + "." + extension);
+    }
+
+    private DecodedPayload decodeFilesPayload(ClipboardHistory item, String fileName) {
+        String payload = item.getPayload();
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            @SuppressWarnings("unchecked")
+            Map<String, String> fileMap = objectMapper.readValue(payload, Map.class);
+            if (fileMap == null || fileMap.isEmpty()) {
+                return null;
+            }
+            String selectedName = fileName;
+            if (selectedName == null || selectedName.isBlank()) {
+                if (fileMap.size() == 1) {
+                    selectedName = fileMap.keySet().iterator().next();
+                } else {
+                    return null;
+                }
+            }
+            String encoded = fileMap.get(selectedName);
+            if (encoded == null) {
+                return null;
+            }
+            byte[] decoded = safeBase64Decode(encoded);
+            String contentType = URLConnection.guessContentTypeFromName(selectedName);
+            if (contentType == null || contentType.isBlank()) {
+                contentType = "application/octet-stream";
+            }
+            return new DecodedPayload(decoded, contentType, selectedName);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private byte[] safeBase64Decode(String payload) {
+        try {
+            return Base64.getDecoder().decode(payload);
+        } catch (IllegalArgumentException ex) {
+            return payload.getBytes(StandardCharsets.UTF_8);
+        }
+    }
+
+    private String defaultExtension(String payloadType) {
+        if ("image".equals(payloadType)) {
+            return "png";
+        }
+        if ("file".equals(payloadType)) {
+            return "bin";
+        }
+        return "txt";
+    }
+
+    private String extensionFromContentType(String contentType, String payloadType) {
+        if (contentType == null) {
+            return defaultExtension(payloadType);
+        }
+        if (contentType.contains("png")) return "png";
+        if (contentType.contains("jpeg")) return "jpg";
+        if (contentType.contains("jpg")) return "jpg";
+        if (contentType.contains("gif")) return "gif";
+        if (contentType.contains("webp")) return "webp";
+        if (contentType.contains("svg")) return "svg";
+        if (contentType.contains("pdf")) return "pdf";
+        if (contentType.contains("zip")) return "zip";
+        if (contentType.contains("json")) return "json";
+        if (contentType.contains("text")) return "txt";
+        return defaultExtension(payloadType);
+    }
+
+    private boolean looksLikeBase64(String payload) {
+        if (payload == null || payload.length() < 200) {
+            return false;
+        }
+        if (payload.startsWith("data:")) {
+            return true;
+        }
+        if (payload.length() % 4 != 0) {
+            return false;
+        }
+        return payload.matches("^[A-Za-z0-9+/=\\r\\n]+$");
     }
 
 }

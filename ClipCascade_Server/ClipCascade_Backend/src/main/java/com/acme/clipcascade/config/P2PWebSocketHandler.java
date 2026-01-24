@@ -24,6 +24,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import com.acme.clipcascade.constants.ServerConstants;
+import com.acme.clipcascade.service.DeviceService;
 import com.acme.clipcascade.utils.MapUtility;
 import com.acme.clipcascade.utils.TimeUtility;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -40,6 +41,7 @@ public class P2PWebSocketHandler extends AbstractWebSocketHandler {
     private final Logger logger;
     private final long MAX_GLOBAL_CONNECTIONS;
     private final long MAX_CONNECTIONS_PER_USER;
+    private final DeviceService deviceService;
 
     private final Map<String, Map<String, WebSocketSession>> sessions = new ConcurrentHashMap<>();
     private final Map<String, Map<String, String>> sessionsUUID = new ConcurrentHashMap<>();
@@ -52,10 +54,11 @@ public class P2PWebSocketHandler extends AbstractWebSocketHandler {
     private final AtomicLong totalInboundMessages = new AtomicLong();
     private final AtomicLong totalOutboundMessages = new AtomicLong();
 
-    public P2PWebSocketHandler(ObjectMapper objectMapper, ClipCascadeProperties clipCascadeProperties) {
+    public P2PWebSocketHandler(ObjectMapper objectMapper, ClipCascadeProperties clipCascadeProperties, DeviceService deviceService) {
         this.objectMapper = objectMapper;
         this.MAX_GLOBAL_CONNECTIONS = clipCascadeProperties.getMaxWsGlobalConnections();
         this.MAX_CONNECTIONS_PER_USER = clipCascadeProperties.getMaxWsConnectionsPerUser();
+        this.deviceService = deviceService;
         this.logger = (Logger) LoggerFactory.getLogger(P2PWebSocketHandler.class);
     }
 
@@ -117,6 +120,14 @@ public class P2PWebSocketHandler extends AbstractWebSocketHandler {
 
             sendMessage(session, jsonStr);
 
+            // Register device and mark as online
+            try {
+                deviceService.registerDevice(peerId, username, "p2p", null);
+                deviceService.markDeviceOnline(peerId, session.getId());
+            } catch (Exception e) {
+                logger.debug("Failed to register device: {}", e.getMessage());
+            }
+
             // Broadcast updated peer list to everyone in that user's room
             broadcastPeerList(username);
         } finally {
@@ -157,6 +168,13 @@ public class P2PWebSocketHandler extends AbstractWebSocketHandler {
 
             lastHeartbeat.remove(session.getId());
             sessionLocks.remove(session.getId());
+
+            // Mark device as offline
+            try {
+                deviceService.markDeviceOffline(session.getId());
+            } catch (Exception e) {
+                logger.debug("Failed to mark device offline: {}", e.getMessage());
+            }
 
             // Notify everyone else in that user's room
             broadcastPeerList(username);
