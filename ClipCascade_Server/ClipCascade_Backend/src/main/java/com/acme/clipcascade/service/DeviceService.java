@@ -31,7 +31,7 @@ public class DeviceService {
     }
 
     @Transactional
-    public Device registerDevice(String deviceId, String username, String deviceType, String osInfo, String ipAddress, String friendlyName) {
+    public synchronized Device registerDevice(String deviceId, String username, String deviceType, String osInfo, String ipAddress, String friendlyName) {
         Device device = deviceRepo.findById(deviceId).orElse(null);
 
         if (device == null) {
@@ -58,7 +58,12 @@ public class DeviceService {
             }
         }
 
-        return deviceRepo.save(device);
+        try {
+            return deviceRepo.saveAndFlush(device);
+        } catch (Exception e) {
+            // Concurrent insert fallback
+            return deviceRepo.findById(deviceId).orElse(device);
+        }
     }
 
     public void markDeviceOnline(String deviceId, String sessionId) {

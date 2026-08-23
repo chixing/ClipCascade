@@ -18,11 +18,8 @@ services:
     # # 🏷️ Assign a name to the container
     container_name: clipcascade
 
-    # # 🌐 Map port 8080 on the host to port 8080 inside the container.
-    ports:
-      - 8086:8080
+    network_mode: host
 
-    # # 🔄 Automatically restart the container if it stops unexpectedly.
     restart: always
 
     volumes:
@@ -83,7 +80,7 @@ services:
 
       # # ⚙️ Set the internal port for the server.
       # # Default: 8080
-      # - CC_PORT=8080
+      - CC_PORT=8086
 
       # # ⚙️ Configure the server session timeout.
       # # Note: On restart, the session will be logged out.
