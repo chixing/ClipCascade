@@ -1,5 +1,6 @@
 package com.acme.clipcascade.model;
 
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.Collections;
 
@@ -10,11 +11,13 @@ import org.springframework.security.core.userdetails.UserDetails;
 import com.acme.clipcascade.constants.RoleConstants;
 import com.acme.clipcascade.service.BruteForceProtectionService;
 
-public class UserPrincipal implements UserDetails {
+public class UserPrincipal implements UserDetails, Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private Users user;
 
-    private final BruteForceProtectionService bruteForceProtectionService;
+    private final transient BruteForceProtectionService bruteForceProtectionService;
 
     public UserPrincipal(
             Users user,
@@ -27,6 +30,9 @@ public class UserPrincipal implements UserDetails {
     @Override
     public boolean isAccountNonLocked() {
 
+        if (bruteForceProtectionService == null) {
+            return true;
+        }
         // validate attempt using brute force protection
         return bruteForceProtectionService.recordAndValidateAttempt(user.getUsername());
     }

@@ -6,9 +6,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 
+import java.io.Serializable;
+
 @Entity
 @Table(name = "users")
-public class Users {
+public class Users implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
     @NotNull(message = "Username is required") // Validation constraint at application level
