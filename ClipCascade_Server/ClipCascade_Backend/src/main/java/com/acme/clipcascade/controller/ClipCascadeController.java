@@ -824,6 +824,45 @@ public class ClipCascadeController {
         return new ResponseEntity<>(decoded.data, headers, HttpStatus.OK);
     }
 
+    @GetMapping("/admin/clipboard-history/{id}/preview")
+    public ResponseEntity<byte[]> previewClipboardHistoryItem(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable Long id) {
+
+        if (!userPrincipal.isAdmin()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        ClipboardHistory item = clipboardHistoryService.getHistoryItem(id, userPrincipal.getUsername());
+        if (item == null || item.getPayload() == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        byte[] raw = safeBase64Decode(item.getPayload());
+        if (raw == null || raw.length == 0) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        try {
+            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(raw);
+            BufferedImage img = ImageIO.read(bais);
+            if (img != null) {
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                ImageIO.write(img, "PNG", baos);
+                byte[] pngBytes = baos.toByteArray();
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.IMAGE_PNG);
+                headers.setCacheControl("max-age=86400, public");
+                return new ResponseEntity<>(pngBytes, headers, HttpStatus.OK);
+            }
+        } catch (Exception ignored) {
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.IMAGE_PNG);
+        return new ResponseEntity<>(raw, headers, HttpStatus.OK);
+    }
+
     @DeleteMapping("/admin/clipboard-history")
     @Transactional
     public ResponseEntity<?> deleteClipboardHistory(

@@ -808,18 +808,14 @@
 
         tbody.innerHTML = items.map(item => {
           let previewHtml = escapeHtml(item.payloadPreview || '');
-          if (item.payloadType === 'image' && item.payload) {
-            const imgSrc = formatImageSrc(item.payload);
-            if (imgSrc) {
-              previewHtml = `
-                <div style="display: inline-flex; align-items: center; gap: 8px;">
-                  <img src="${imgSrc}" alt="Preview" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\'font-size:0.85rem; color:#6c757d;\'>🖼️ Image (${formatSize(item.payloadSize)})</span>';" style="max-height: 42px; max-width: 70px; object-fit: contain; border-radius: 4px; border: 1px solid #dee2e6; background: #f8f9fa; vertical-align: middle;">
-                  <span style="font-size: 0.8rem; color: #6c757d;">${formatSize(item.payloadSize)}</span>
-                </div>
-              `;
-            } else {
-              previewHtml = `<span style="font-size: 0.85rem; color: #6c757d;">🖼️ Image (${formatSize(item.payloadSize)})</span>`;
-            }
+          if (item.payloadType === 'image') {
+            const imgSrc = `${API.history}/${item.id}/preview`;
+            previewHtml = `
+              <div style="display: inline-flex; align-items: center; gap: 8px;">
+                <img src="${imgSrc}" alt="Preview" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\'font-size:0.85rem; color:#6c757d;\'>🖼️ Image (${formatSize(item.payloadSize)})</span>';" style="max-height: 42px; max-width: 70px; object-fit: contain; border-radius: 4px; border: 1px solid #dee2e6; background: #f8f9fa; vertical-align: middle;">
+                <span style="font-size: 0.8rem; color: #6c757d;">${formatSize(item.payloadSize)}</span>
+              </div>
+            `;
           }
           return `
             <tr data-id="${item.id}">
@@ -920,12 +916,8 @@
           title.textContent = `${payloadType || 'unknown'} - ${formatTime(item.createdAt)}`;
 
           if (payloadType === 'image') {
-            const imgSrc = formatImageSrc(item.payload);
-            if (imgSrc) {
-              body.innerHTML = `<img src="${imgSrc}" alt="Clipboard image" style="max-width: 100%; height: auto; border-radius: 4px;" onerror="this.onerror=null; this.parentElement.innerHTML='<div>Image preview unavailable (encrypted or unsupported format). Use Download to save the file.</div>';">`;
-            } else {
-              body.innerHTML = `<div>Image preview unavailable (encrypted or unsupported format). Use Download to save the file.</div>`;
-            }
+            const imgSrc = `${API.history}/${item.id}/preview`;
+            body.innerHTML = `<img src="${imgSrc}" alt="Clipboard image" style="max-width: 100%; height: auto; border-radius: 4px;" onerror="this.onerror=null; this.parentElement.innerHTML='<div>Image preview unavailable (encrypted). Use Download to save the file.</div>';">`;
             downloadBtn.style.display = 'inline-block';
           } else if (payloadType === 'files') {
             renderFilesList(body, item);
@@ -1026,18 +1018,27 @@
         }
       }
 
-      async function copyImageToClipboard(base64Data) {
+      async function copyImageToClipboard(item) {
         try {
-          const cleanBase64 = base64Data.replace(/^data:image\/[a-z]+;base64,/, '');
-          const byteCharacters = atob(cleanBase64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          let blob = null;
+          if (item && item.id) {
+            const resp = await fetch(`${API.history}/${item.id}/preview`);
+            if (resp.ok) {
+              blob = await resp.blob();
+            }
           }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'image/png' });
+          if (!blob && typeof item === 'string') {
+            const cleanBase64 = item.replace(/^data:image\/[a-z]+;base64,/, '');
+            const byteCharacters = atob(cleanBase64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            blob = new Blob([byteArray], { type: 'image/png' });
+          }
 
-          if (navigator.clipboard && window.isSecureContext && typeof navigator.clipboard.write === 'function' && typeof ClipboardItem !== 'undefined') {
+          if (blob && navigator.clipboard && window.isSecureContext && typeof navigator.clipboard.write === 'function' && typeof ClipboardItem !== 'undefined') {
             await navigator.clipboard.write([
               new ClipboardItem({ 'image/png': blob })
             ]);
@@ -1061,7 +1062,7 @@
             alert('Failed to copy');
           }
         } else if (payloadType === 'image') {
-          const success = await copyImageToClipboard(currentViewItem.payload || '');
+          const success = await copyImageToClipboard(currentViewItem);
           if (success) {
             alert('Copied image to clipboard!');
           } else {
@@ -1084,7 +1085,7 @@
               alert('Failed to copy');
             }
           } else if (payloadType === 'image') {
-            const success = await copyImageToClipboard(item.payload || '');
+            const success = await copyImageToClipboard(item);
             if (success) {
               alert('Copied image to clipboard!');
             } else {
