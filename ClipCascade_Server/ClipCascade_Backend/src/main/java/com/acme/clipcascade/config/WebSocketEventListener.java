@@ -14,6 +14,7 @@ import org.springframework.web.socket.messaging.SessionConnectEvent;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import com.acme.clipcascade.model.Device;
 import com.acme.clipcascade.model.UserPrincipal;
 import com.acme.clipcascade.service.DeviceService;
 
@@ -56,17 +57,13 @@ public class WebSocketEventListener {
             deviceType = inferDeviceType(userAgent, deviceType);
             osInfo = inferOsInfo(userAgent, osInfo);
 
-            // Generate device ID if not provided
-            if (deviceId == null || deviceId.isEmpty()) {
-                deviceId = sessionId;
-            }
-
             // Register device and mark as online
-            deviceService.registerDevice(deviceId, username, deviceType, osInfo, ipAddress, friendlyName);
-            deviceService.markDeviceOnline(deviceId, sessionId);
+            Device registered = deviceService.registerDevice(deviceId, username, deviceType, osInfo, ipAddress, friendlyName);
+            String effectiveId = (registered != null && registered.getId() != null) ? registered.getId() : (deviceId != null && !deviceId.isEmpty() ? deviceId : sessionId);
+            deviceService.markDeviceOnline(effectiveId, sessionId);
 
             logger.debug("WebSocket connected: user={}, sessionId={}, deviceId={}, type={}, os={}, ip={}",
-                    username, sessionId, deviceId, deviceType, osInfo, ipAddress);
+                    username, sessionId, effectiveId, deviceType, osInfo, ipAddress);
         } catch (Exception e) {
             logger.debug("Failed to process WebSocket connect event: {}", e.getMessage());
         }
@@ -97,12 +94,9 @@ public class WebSocketEventListener {
             deviceType = inferDeviceType(userAgent, deviceType);
             osInfo = inferOsInfo(userAgent, osInfo);
 
-            if (deviceId == null || deviceId.isEmpty()) {
-                deviceId = sessionId;
-            }
-
-            deviceService.registerDevice(deviceId, username, deviceType, osInfo, ipAddress, friendlyName);
-            deviceService.markDeviceOnline(deviceId, sessionId);
+            Device registered = deviceService.registerDevice(deviceId, username, deviceType, osInfo, ipAddress, friendlyName);
+            String effectiveId = (registered != null && registered.getId() != null) ? registered.getId() : (deviceId != null && !deviceId.isEmpty() ? deviceId : sessionId);
+            deviceService.markDeviceOnline(effectiveId, sessionId);
         } catch (Exception e) {
             logger.debug("Failed to process WebSocket connected event: {}", e.getMessage());
         }

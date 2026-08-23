@@ -32,6 +32,27 @@ public class DeviceService {
 
     @Transactional
     public synchronized Device registerDevice(String deviceId, String username, String deviceType, String osInfo, String ipAddress, String friendlyName) {
+        // Generate stable deterministic device ID for stock clients that lack hardware UUID
+        if (deviceId == null || deviceId.isEmpty() || !deviceId.startsWith("dev-")) {
+            if (ipAddress != null && !ipAddress.trim().isEmpty() && !ipAddress.equals("127.0.0.1") && !ipAddress.equals("localhost")) {
+                String raw = username + ":" + ipAddress.trim() + ":" + (deviceType != null ? deviceType.trim().toLowerCase() : "generic");
+                deviceId = "dev-" + java.util.UUID.nameUUIDFromBytes(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            }
+        }
+
+        // Clean up any legacy offline records for this user and IP that don't match the new stable ID
+        if (ipAddress != null && !ipAddress.trim().isEmpty() && deviceId.startsWith("dev-")) {
+            try {
+                List<Device> existing = deviceRepo.findByUsernameOrderByLastSeenDesc(username);
+                for (Device d : existing) {
+                    if (!d.getId().equals(deviceId) && ipAddress.equals(d.getIpAddress()) && !isDeviceOnline(d.getId())) {
+                        deviceRepo.delete(d);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
         Device device = deviceRepo.findById(deviceId).orElse(null);
 
         if (device == null) {
