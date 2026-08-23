@@ -62,38 +62,7 @@ class STOMPManager(WSInterface):
                 on_close_callback=self._on_close,
                 sslopt=websocket_sslopt_for_config(self.config),
             )
-            import platform
-            import socket
-
-            hostname = socket.gethostname()
-            device_id = self.config.data.get("device_id")
-            if not device_id:
-                device_id = f"desktop-{hostname}"
-
-            local_ip = ""
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("1.1.1.1", 80))
-                local_ip = s.getsockname()[0]
-                s.close()
-            except Exception:
-                try:
-                    local_ip = socket.gethostbyname(hostname)
-                except Exception:
-                    pass
-
-            os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
-            connect_headers = {
-                "deviceId": device_id,
-                "deviceType": "desktop",
-                "osInfo": os_info,
-                "friendlyName": hostname,
-                "ipAddress": local_ip,
-            }
-            self.device_metadata = connect_headers
-
             self.client.connect(
-                headers=connect_headers,
                 timeout=WEBSOCKET_TIMEOUT,
                 connectCallback=lambda _: self.client.subscribe(  # receive event
                     destination=SUBSCRIPTION_DESTINATION,
@@ -144,13 +113,7 @@ class STOMPManager(WSInterface):
                         payload = CipherManager.encode_to_json_string(
                             **self.cipher_manager.encrypt(payload)
                         )
-                    message_data = {
-                        "payload": payload,
-                        "type": payload_type,
-                    }
-                    if hasattr(self, "device_metadata") and self.device_metadata:
-                        message_data["metadata"] = self.device_metadata
-                    body = json.dumps(message_data)
+                    body = json.dumps({"payload": payload, "type": payload_type})
                     self.client.send(destination=SEND_DESTINATION, body=body)
         except Exception as e:
             logging.error(f"Failed to send data: {e}")
