@@ -726,6 +726,20 @@ public class ClipCascadeController {
                 "Forbidden");
     }
 
+    @DeleteMapping("/admin/devices/{deviceId}")
+    public ResponseEntity<?> deleteDevice(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable String deviceId) {
+
+        return ResponseEntityUtil.conditionalExecuteOrError(
+                userPrincipal.isAdmin(),
+                () -> ResponseEntityUtil.buildResponse(
+                        deviceService.deleteDevice(deviceId, userPrincipal.getUsername()),
+                        "Device deleted successfully",
+                        "Failed to delete device"),
+                "Forbidden");
+    }
+
     // ==================== Clipboard History Endpoints ====================
 
     @GetMapping("/admin/clipboard-history")

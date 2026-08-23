@@ -86,16 +86,36 @@ public class WebSocketEventListener {
 
     private String getHeaderValue(StompHeaderAccessor headerAccessor, String headerName) {
         try {
-            // Try native headers first
-            Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
-            if (sessionAttributes != null && sessionAttributes.containsKey(headerName)) {
-                return (String) sessionAttributes.get(headerName);
+            // 1. Try native headers on current accessor
+            String value = headerAccessor.getFirstNativeHeader(headerName);
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
             }
 
-            // Try STOMP headers
-            String value = headerAccessor.getFirstNativeHeader(headerName);
-            if (value != null) {
-                return value;
+            // 2. Try CONNECT message frame (where client connect headers are stored in Spring STOMP)
+            Object connectMsg = headerAccessor.getHeader(org.springframework.messaging.simp.SimpMessageHeaderAccessor.CONNECT_MESSAGE_HEADER);
+            if (connectMsg instanceof org.springframework.messaging.Message<?> msg) {
+                StompHeaderAccessor connectAccessor = StompHeaderAccessor.wrap(msg);
+                String connectVal = connectAccessor.getFirstNativeHeader(headerName);
+                if (connectVal != null && !connectVal.trim().isEmpty()) {
+                    return connectVal.trim();
+                }
+                Map<String, Object> connAttrs = connectAccessor.getSessionAttributes();
+                if (connAttrs != null && connAttrs.containsKey(headerName)) {
+                    Object val = connAttrs.get(headerName);
+                    if (val != null) {
+                        return val.toString().trim();
+                    }
+                }
+            }
+
+            // 3. Try session attributes (populated by HandshakeInterceptor)
+            Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
+            if (sessionAttributes != null && sessionAttributes.containsKey(headerName)) {
+                Object val = sessionAttributes.get(headerName);
+                if (val != null) {
+                    return val.toString().trim();
+                }
             }
         } catch (Exception e) {
             // Ignore

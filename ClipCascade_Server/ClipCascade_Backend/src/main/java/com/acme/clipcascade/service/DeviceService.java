@@ -110,6 +110,13 @@ public class DeviceService {
     }
 
     @Transactional
+    public boolean deleteDevice(String deviceId, String username) {
+        int deleted = deviceRepo.deleteByIdAndUsername(deviceId, username);
+        onlineDevices.remove(deviceId);
+        return deleted > 0;
+    }
+
+    @Transactional
     public void deleteDevicesForUser(String username) {
         deviceRepo.deleteByUsername(username);
     }

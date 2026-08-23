@@ -5,6 +5,10 @@ public class IpResolverConstants {
     // IP header candidates
     public static final String[] IP_HEADER_CANDIDATES = {
             "X-Forwarded-For",
+            "X-Real-IP",
+            "CF-Connecting-IP",
+            "True-Client-IP",
+            "X-Client-IP",
             "Proxy-Client-IP",
             "WL-Proxy-Client-IP",
             "HTTP_X_FORWARDED_FOR",

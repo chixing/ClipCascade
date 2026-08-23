@@ -685,6 +685,23 @@
         }
       }
 
+      function formatImageSrc(payload) {
+        if (!payload) return null;
+        const str = String(payload).trim();
+        if (str.startsWith('{') && str.endsWith('}')) {
+          // Encrypted ciphertext JSON
+          return null;
+        }
+        if (str.startsWith('data:image/')) {
+          return str;
+        }
+        const clean = str.replace(/\s+/g, '');
+        if (clean.length > 20) {
+          return `data:image/png;base64,${clean}`;
+        }
+        return null;
+      }
+
       function renderDevices() {
         const container = document.getElementById('devices-container');
         const activeDevices = getActiveDevices();
@@ -699,7 +716,8 @@
           const osOrType = escapeHtml(device.osInfo || device.deviceType || 'Device');
           const ipInfo = device.ipAddress ? `<span style="font-family: monospace; font-size: 0.8rem; color: #495057;">IP: ${escapeHtml(device.ipAddress)}</span>` : '';
           return `
-            <div class="device-card ${device.online ? 'online' : ''}">
+            <div class="device-card ${device.online ? 'online' : ''}" style="position: relative;">
+              <button onclick="removeDevice('${device.id}', event)" title="Remove device" style="position: absolute; top: 8px; right: 8px; background: none; border: none; font-size: 1.1rem; color: #adb5bd; cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 4px;" onmouseover="this.style.color='#e03131'" onmouseout="this.style.color='#adb5bd'">&times;</button>
               <div class="device-status"></div>
               <div class="device-icon">${getDeviceIcon(device.deviceType || device.osInfo)}</div>
               <div class="device-name" onclick="showRenameModal('${device.id}', '${escapeHtml(device.friendlyName || '')}')" title="Click to rename">${deviceHeader}</div>
@@ -709,6 +727,17 @@
             </div>
           `;
         }).join('');
+      }
+
+      async function removeDevice(id, event) {
+        if (event) event.stopPropagation();
+        if (!confirm('Remove this device from dashboard?')) return;
+        try {
+          await fetchAPI(`${API.devices}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          await loadDevices();
+        } catch (e) {
+          alert('Failed to remove device');
+        }
       }
 
       function getActiveDevices() {
@@ -776,12 +805,17 @@
         tbody.innerHTML = items.map(item => {
           let previewHtml = escapeHtml(item.payloadPreview || '');
           if (item.payloadType === 'image' && item.payload) {
-            previewHtml = `
-              <div style="display: inline-flex; align-items: center; gap: 8px;">
-                <img src="data:image/png;base64,${item.payload}" alt="Preview" style="max-height: 42px; max-width: 70px; object-fit: contain; border-radius: 4px; border: 1px solid #dee2e6; background: #f8f9fa; vertical-align: middle;">
-                <span style="font-size: 0.8rem; color: #6c757d;">${formatSize(item.payloadSize)}</span>
-              </div>
-            `;
+            const imgSrc = formatImageSrc(item.payload);
+            if (imgSrc) {
+              previewHtml = `
+                <div style="display: inline-flex; align-items: center; gap: 8px;">
+                  <img src="${imgSrc}" alt="Preview" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\'font-size:0.85rem; color:#6c757d;\'>🖼️ Image (${formatSize(item.payloadSize)})</span>';" style="max-height: 42px; max-width: 70px; object-fit: contain; border-radius: 4px; border: 1px solid #dee2e6; background: #f8f9fa; vertical-align: middle;">
+                  <span style="font-size: 0.8rem; color: #6c757d;">${formatSize(item.payloadSize)}</span>
+                </div>
+              `;
+            } else {
+              previewHtml = `<span style="font-size: 0.85rem; color: #6c757d;">🖼️ Image (${formatSize(item.payloadSize)})</span>`;
+            }
           }
           return `
             <tr data-id="${item.id}">
@@ -882,7 +916,12 @@
           title.textContent = `${payloadType || 'unknown'} - ${formatTime(item.createdAt)}`;
 
           if (payloadType === 'image') {
-            body.innerHTML = `<img src="data:image/png;base64,${item.payload}" alt="Clipboard image">`;
+            const imgSrc = formatImageSrc(item.payload);
+            if (imgSrc) {
+              body.innerHTML = `<img src="${imgSrc}" alt="Clipboard image" style="max-width: 100%; height: auto; border-radius: 4px;" onerror="this.onerror=null; this.parentElement.innerHTML='<div>Image preview unavailable (encrypted or unsupported format). Use Download to save the file.</div>';">`;
+            } else {
+              body.innerHTML = `<div>Image preview unavailable (encrypted or unsupported format). Use Download to save the file.</div>`;
+            }
             downloadBtn.style.display = 'inline-block';
           } else if (payloadType === 'files') {
             renderFilesList(body, item);

@@ -25,5 +25,9 @@ public interface DeviceRepo extends JpaRepository<Device, String> {
     @Query("UPDATE Device d SET d.friendlyName = :friendlyName WHERE d.id = :id AND d.username = :username")
     int updateFriendlyName(@Param("id") String id, @Param("username") String username, @Param("friendlyName") String friendlyName);
 
+    @Modifying
+    @Query("DELETE FROM Device d WHERE d.id = :id AND d.username = :username")
+    int deleteByIdAndUsername(@Param("id") String id, @Param("username") String username);
+
     void deleteByUsername(String username);
 }

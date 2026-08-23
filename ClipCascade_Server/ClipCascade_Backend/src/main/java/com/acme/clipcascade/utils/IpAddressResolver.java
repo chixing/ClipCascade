@@ -46,4 +46,22 @@ public class IpAddressResolver {
         }
         return request.getRemoteAddr();
     }
+
+    public static String getIpAddressFromHeaders(org.springframework.http.HttpHeaders headers, java.net.InetSocketAddress remoteAddress) {
+        if (headers != null) {
+            for (String header : IpResolverConstants.IP_HEADER_CANDIDATES) {
+                String ipList = headers.getFirst(header);
+                if (ipList != null
+                        && !ipList.isEmpty()
+                        && !IpResolverConstants.UNKNOWN.equalsIgnoreCase(ipList)) {
+
+                    return ipList.split(",")[0].trim();
+                }
+            }
+        }
+        if (remoteAddress != null && remoteAddress.getAddress() != null) {
+            return remoteAddress.getAddress().getHostAddress();
+        }
+        return "0.0.0.0";
+    }
 }
