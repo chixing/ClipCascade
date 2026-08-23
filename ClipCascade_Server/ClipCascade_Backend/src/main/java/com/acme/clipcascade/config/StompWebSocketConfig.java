@@ -87,7 +87,13 @@ public class StompWebSocketConfig implements WebSocketMessageBrokerConfigurer {
                             @NonNull ServerHttpResponse response,
                             @NonNull WebSocketHandler wsHandler,
                             @NonNull Map<String, Object> attributes) {
-                        String ip = IpAddressResolver.getIpAddressFromHeaders(request.getHeaders(), request.getRemoteAddress());
+                        String ip = null;
+                        if (request instanceof ServletServerHttpRequest servletRequest) {
+                            ip = IpAddressResolver.getIpAddressFromRequest(servletRequest.getServletRequest());
+                        }
+                        if (ip == null || ip.isEmpty() || "0.0.0.0".equals(ip)) {
+                            ip = IpAddressResolver.getIpAddressFromHeaders(request.getHeaders(), request.getRemoteAddress());
+                        }
                         attributes.put("ipAddress", ip);
 
                         String userAgent = request.getHeaders().getFirst("User-Agent");
