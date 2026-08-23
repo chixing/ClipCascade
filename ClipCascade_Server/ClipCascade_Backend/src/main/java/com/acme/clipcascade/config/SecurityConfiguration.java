@@ -43,6 +43,15 @@ public class SecurityConfiguration {
 		return new SessionRegistryImpl();
 	}
 
+	@Bean
+	public org.springframework.session.web.http.CookieSerializer cookieSerializer() {
+		org.springframework.session.web.http.DefaultCookieSerializer serializer = new org.springframework.session.web.http.DefaultCookieSerializer();
+		serializer.setCookieName("JSESSIONID");
+		serializer.setCookiePath("/");
+		serializer.setUseHttpOnlyCookie(true);
+		return serializer;
+	}
+
 	// Ensures the SessionRegistry is notified of session lifecycle events
 	@Bean
 	public HttpSessionEventPublisher httpSessionEventPublisher() {
