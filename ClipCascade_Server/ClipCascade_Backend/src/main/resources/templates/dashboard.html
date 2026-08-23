@@ -713,7 +713,11 @@
 
         container.innerHTML = activeDevices.map(device => {
           const deviceHeader = escapeHtml(device.friendlyName || device.displayName || 'Device');
-          const osOrType = escapeHtml(device.osInfo || device.deviceType || 'Device');
+          let osText = device.osInfo;
+          if (!osText || osText.toLowerCase() === 'unknown os') {
+            osText = device.deviceType ? (device.deviceType.charAt(0).toUpperCase() + device.deviceType.slice(1) + ' App') : 'Connected Device';
+          }
+          const osOrType = escapeHtml(osText);
           const ipInfo = device.ipAddress ? `<span style="font-family: monospace; font-size: 0.8rem; color: #495057;">IP: ${escapeHtml(device.ipAddress)}</span>` : '';
           return `
             <div class="device-card ${device.online ? 'online' : ''}" style="position: relative;">
