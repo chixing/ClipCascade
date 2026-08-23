@@ -10,17 +10,17 @@ version: '3.8'
 
 services:
   clipcascade:
-    image: sathvikrao/clipcascade:0.7.0
-    # # 🚀 If you want to always use the latest version of ClipCascade Server, uncomment the line below and comment out the line above.
+    build:
+      context: ../ClipCascade_Backend
+    image: clipcascade:local
     # # Note: If using 'latest', make sure all client devices are updated regularly to maintain compatibility.
-    # image: sathvikrao/clipcascade:latest
 
     # # 🏷️ Assign a name to the container
     container_name: clipcascade
 
     # # 🌐 Map port 8080 on the host to port 8080 inside the container.
     ports:
-      - 8080:8080
+      - 8086:8080
 
     # # 🔄 Automatically restart the container if it stops unexpectedly.
     restart: always
