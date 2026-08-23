@@ -3,6 +3,7 @@ import {
   NativeModules,
   DeviceEventEmitter,
   Alert,
+  Platform,
 } from 'react-native';
 
 import notifee, { AndroidImportance } from '@notifee/react-native';
@@ -373,7 +374,12 @@ module.exports = async (inputData = null) => {
           });
         };
 
-        if (server_mode === 'P2S') {
+          const brand = (Platform.constants && Platform.constants.Brand) ? Platform.constants.Brand : '';
+          const model = (Platform.constants && Platform.constants.Model) ? Platform.constants.Model : 'Mobile';
+          const release = (Platform.constants && Platform.constants.Release) ? Platform.constants.Release : '';
+          const mobileFriendlyName = `${brand ? brand + ' ' : ''}${model}`.trim();
+          const mobileOsInfo = Platform.OS === 'android' ? `Android ${release} (${model})` : `iOS (${model})`;
+
           // websocket stomp client
           stompClient = new Client({
             brokerURL: websocket_url,
@@ -382,6 +388,12 @@ module.exports = async (inputData = null) => {
             heartbeatIncoming: HEARTBEAT_INTERVAL,
             heartbeatOutgoing: 0,
             forceBinaryWSFrames: true, // https://stomp-js.github.io/api-docs/latest/classes/Client.html#forceBinaryWSFrames
+            connectHeaders: {
+              deviceId: `mobile-${Platform.OS}-${model.replace(/\s+/g, '_')}`,
+              deviceType: 'mobile',
+              osInfo: mobileOsInfo,
+              friendlyName: mobileFriendlyName,
+            },
             // appendMissingNULLonIncoming: true, // https://stomp-js.github.io/api-docs/latest/classes/Client.html#appendMissingNULLonIncoming
             onConnect: async () => {
               await setDataInAsyncStorage('wsStatusMessage', '✅ Connected');
@@ -564,6 +576,12 @@ module.exports = async (inputData = null) => {
                         body: JSON.stringify({
                           payload: String(clipContent),
                           type: type_,
+                          metadata: {
+                            deviceId: `mobile-${Platform.OS}-${model.replace(/\s+/g, '_')}`,
+                            deviceType: 'mobile',
+                            osInfo: mobileOsInfo,
+                            friendlyName: mobileFriendlyName,
+                          },
                         }),
                       });
                     }

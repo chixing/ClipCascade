@@ -70,12 +70,14 @@ class STOMPManager(WSInterface):
             if not device_id:
                 device_id = f"desktop-{hostname}"
 
+            os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
             connect_headers = {
                 "deviceId": device_id,
                 "deviceType": "desktop",
-                "osInfo": f"{platform.system()} {platform.release()}",
+                "osInfo": os_info,
                 "friendlyName": hostname,
             }
+            self.device_metadata = connect_headers
 
             self.client.connect(
                 headers=connect_headers,
@@ -129,7 +131,13 @@ class STOMPManager(WSInterface):
                         payload = CipherManager.encode_to_json_string(
                             **self.cipher_manager.encrypt(payload)
                         )
-                    body = json.dumps({"payload": payload, "type": payload_type})
+                    message_data = {
+                        "payload": payload,
+                        "type": payload_type,
+                    }
+                    if hasattr(self, "device_metadata") and self.device_metadata:
+                        message_data["metadata"] = self.device_metadata
+                    body = json.dumps(message_data)
                     self.client.send(destination=SEND_DESTINATION, body=body)
         except Exception as e:
             logging.error(f"Failed to send data: {e}")

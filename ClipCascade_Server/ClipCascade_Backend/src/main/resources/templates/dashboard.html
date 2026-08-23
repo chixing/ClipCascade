@@ -695,14 +695,17 @@
         }
 
         container.innerHTML = activeDevices.map(device => {
-          const typeAndIp = [device.osInfo || device.deviceType || 'Device', device.ipAddress].filter(Boolean).join(' &bull; ');
+          const deviceHeader = escapeHtml(device.friendlyName || device.displayName || 'Device');
+          const osOrType = escapeHtml(device.osInfo || device.deviceType || 'Device');
+          const ipInfo = device.ipAddress ? `<span style="font-family: monospace; font-size: 0.8rem; color: #495057;">IP: ${escapeHtml(device.ipAddress)}</span>` : '';
           return `
             <div class="device-card ${device.online ? 'online' : ''}">
               <div class="device-status"></div>
               <div class="device-icon">${getDeviceIcon(device.deviceType || device.osInfo)}</div>
-              <div class="device-name" onclick="showRenameModal('${device.id}', '${escapeHtml(device.friendlyName || '')}')" title="Click to rename">${escapeHtml(device.displayName)}</div>
-              <div class="device-info">${typeAndIp}</div>
-              <div class="device-info">${device.online ? '<span style="color: #2ecc71; font-weight: 500;">● Online</span>' : 'Last seen ' + formatTime(device.lastSeen)}</div>
+              <div class="device-name" onclick="showRenameModal('${device.id}', '${escapeHtml(device.friendlyName || '')}')" title="Click to rename">${deviceHeader}</div>
+              <div class="device-info">${osOrType}</div>
+              ${ipInfo ? `<div class="device-info">${ipInfo}</div>` : ''}
+              <div class="device-info">${device.online ? '<span style="color: #2ecc71; font-weight: 600;">● Online</span>' : 'Last seen ' + formatTime(device.lastSeen)}</div>
             </div>
           `;
         }).join('');
