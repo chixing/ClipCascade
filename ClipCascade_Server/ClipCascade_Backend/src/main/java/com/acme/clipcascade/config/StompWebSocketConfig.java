@@ -28,6 +28,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @ConditionalOnProperty(prefix = "app.p2p", name = "enabled", havingValue = "false", matchIfMissing = false)
 public class StompWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(StompWebSocketConfig.class);
     private final ClipCascadeProperties clipCascadeProperties;
 
     public StompWebSocketConfig(ClipCascadeProperties clipCascadeProperties) {
@@ -89,11 +90,17 @@ public class StompWebSocketConfig implements WebSocketMessageBrokerConfigurer {
                             @NonNull Map<String, Object> attributes) {
                         String ip = null;
                         if (request instanceof ServletServerHttpRequest servletRequest) {
-                            ip = IpAddressResolver.getIpAddressFromRequest(servletRequest.getServletRequest());
+                            HttpServletRequest httpServletRequest = servletRequest.getServletRequest();
+                            logger.info(">>> Handshake headers: X-Forwarded-For={}, X-Real-IP={}, remoteAddr={}",
+                                    httpServletRequest.getHeader("X-Forwarded-For"),
+                                    httpServletRequest.getHeader("X-Real-IP"),
+                                    httpServletRequest.getRemoteAddr());
+                            ip = IpAddressResolver.getIpAddressFromRequest(httpServletRequest);
                         }
                         if (ip == null || ip.isEmpty() || "0.0.0.0".equals(ip)) {
                             ip = IpAddressResolver.getIpAddressFromHeaders(request.getHeaders(), request.getRemoteAddress());
                         }
+                        logger.info(">>> Resolved WebSocket client IP: {}", ip);
                         attributes.put("ipAddress", ip);
 
                         String userAgent = request.getHeaders().getFirst("User-Agent");
