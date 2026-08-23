@@ -70,12 +70,25 @@ class STOMPManager(WSInterface):
             if not device_id:
                 device_id = f"desktop-{hostname}"
 
+            local_ip = ""
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("1.1.1.1", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+            except Exception:
+                try:
+                    local_ip = socket.gethostbyname(hostname)
+                except Exception:
+                    pass
+
             os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
             connect_headers = {
                 "deviceId": device_id,
                 "deviceType": "desktop",
                 "osInfo": os_info,
                 "friendlyName": hostname,
+                "ipAddress": local_ip,
             }
             self.device_metadata = connect_headers
 

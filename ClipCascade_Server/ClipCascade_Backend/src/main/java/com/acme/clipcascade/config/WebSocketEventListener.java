@@ -10,6 +10,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.messaging.SessionConnectEvent;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
@@ -29,7 +30,7 @@ public class WebSocketEventListener {
     }
 
     @EventListener
-    public void handleWebSocketConnectListener(SessionConnectedEvent event) {
+    public void handleWebSocketConnectListener(SessionConnectEvent event) {
         StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
         String sessionId = headerAccessor.getSessionId();
         Principal principal = headerAccessor.getUser();
@@ -68,6 +69,42 @@ public class WebSocketEventListener {
                     username, sessionId, deviceId, deviceType, osInfo, ipAddress);
         } catch (Exception e) {
             logger.debug("Failed to process WebSocket connect event: {}", e.getMessage());
+        }
+    }
+
+    @EventListener
+    public void handleWebSocketConnectedListener(SessionConnectedEvent event) {
+        StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
+        String sessionId = headerAccessor.getSessionId();
+        Principal principal = headerAccessor.getUser();
+
+        if (principal == null) {
+            return;
+        }
+
+        try {
+            UserPrincipal userPrincipal = (UserPrincipal) ((UsernamePasswordAuthenticationToken) principal)
+                    .getPrincipal();
+            String username = userPrincipal.getUsername();
+
+            String deviceId = getHeaderValue(headerAccessor, "deviceId");
+            String deviceType = getHeaderValue(headerAccessor, "deviceType");
+            String osInfo = getHeaderValue(headerAccessor, "osInfo");
+            String friendlyName = getHeaderValue(headerAccessor, "friendlyName");
+            String ipAddress = getHeaderValue(headerAccessor, "ipAddress");
+            String userAgent = getHeaderValue(headerAccessor, "userAgent");
+
+            deviceType = inferDeviceType(userAgent, deviceType);
+            osInfo = inferOsInfo(userAgent, osInfo);
+
+            if (deviceId == null || deviceId.isEmpty()) {
+                deviceId = sessionId;
+            }
+
+            deviceService.registerDevice(deviceId, username, deviceType, osInfo, ipAddress, friendlyName);
+            deviceService.markDeviceOnline(deviceId, sessionId);
+        } catch (Exception e) {
+            logger.debug("Failed to process WebSocket connected event: {}", e.getMessage());
         }
     }
 
