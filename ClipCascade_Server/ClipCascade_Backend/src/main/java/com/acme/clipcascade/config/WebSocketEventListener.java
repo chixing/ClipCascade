@@ -43,10 +43,17 @@ public class WebSocketEventListener {
                     .getPrincipal();
             String username = userPrincipal.getUsername();
 
-            // Extract device info from headers if available
+            // Extract device info from headers / session attributes if available
             String deviceId = getHeaderValue(headerAccessor, "deviceId");
             String deviceType = getHeaderValue(headerAccessor, "deviceType");
             String osInfo = getHeaderValue(headerAccessor, "osInfo");
+            String friendlyName = getHeaderValue(headerAccessor, "friendlyName");
+            String ipAddress = getHeaderValue(headerAccessor, "ipAddress");
+            String userAgent = getHeaderValue(headerAccessor, "userAgent");
+
+            // Infer deviceType and osInfo from User-Agent if not explicitly supplied
+            deviceType = inferDeviceType(userAgent, deviceType);
+            osInfo = inferOsInfo(userAgent, osInfo);
 
             // Generate device ID if not provided
             if (deviceId == null || deviceId.isEmpty()) {
@@ -54,10 +61,11 @@ public class WebSocketEventListener {
             }
 
             // Register device and mark as online
-            deviceService.registerDevice(deviceId, username, deviceType, osInfo);
+            deviceService.registerDevice(deviceId, username, deviceType, osInfo, ipAddress, friendlyName);
             deviceService.markDeviceOnline(deviceId, sessionId);
 
-            logger.debug("WebSocket connected: user={}, sessionId={}, deviceId={}", username, sessionId, deviceId);
+            logger.debug("WebSocket connected: user={}, sessionId={}, deviceId={}, type={}, os={}, ip={}",
+                    username, sessionId, deviceId, deviceType, osInfo, ipAddress);
         } catch (Exception e) {
             logger.debug("Failed to process WebSocket connect event: {}", e.getMessage());
         }
@@ -93,5 +101,54 @@ public class WebSocketEventListener {
             // Ignore
         }
         return null;
+    }
+
+    public static String inferDeviceType(String userAgent, String explicitType) {
+        if (explicitType != null && !explicitType.trim().isEmpty()) {
+            return explicitType.trim();
+        }
+        if (userAgent == null) {
+            return "desktop";
+        }
+        String ua = userAgent.toLowerCase();
+        if (ua.contains("android") || ua.contains("iphone") || ua.contains("ipad") || ua.contains("mobile") || ua.contains("okhttp")) {
+            return "mobile";
+        }
+        if (ua.contains("python") || ua.contains("clipcascade-desktop")) {
+            return "desktop";
+        }
+        if (ua.contains("mozilla") || ua.contains("chrome") || ua.contains("safari") || ua.contains("firefox") || ua.contains("edge")) {
+            return "web";
+        }
+        return "desktop";
+    }
+
+    public static String inferOsInfo(String userAgent, String explicitOs) {
+        if (explicitOs != null && !explicitOs.trim().isEmpty()) {
+            return explicitOs.trim();
+        }
+        if (userAgent == null) {
+            return "Unknown OS";
+        }
+        String uaLower = userAgent.toLowerCase();
+        if (uaLower.contains("windows nt 10.0")) return "Windows 10/11";
+        if (uaLower.contains("windows nt 6.3")) return "Windows 8.1";
+        if (uaLower.contains("windows nt 6.1")) return "Windows 7";
+        if (uaLower.contains("windows")) return "Windows";
+        if (uaLower.contains("android")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("Android\\s+([0-9.]+)").matcher(userAgent);
+            if (m.find()) return "Android " + m.group(1);
+            return "Android";
+        }
+        if (uaLower.contains("iphone") || uaLower.contains("ipad") || uaLower.contains("ios")) return "iOS";
+        if (uaLower.contains("macintosh") || uaLower.contains("mac os x")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("Mac OS X\\s+([0-9_.]+)").matcher(userAgent);
+            if (m.find()) return "macOS " + m.group(1).replace('_', '.');
+            return "macOS";
+        }
+        if (uaLower.contains("ubuntu")) return "Ubuntu Linux";
+        if (uaLower.contains("linux")) return "Linux";
+        if (uaLower.contains("python")) return "Python Desktop App";
+        return "Unknown OS";
     }
 }

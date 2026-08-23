@@ -643,13 +643,21 @@
 
       // Get device icon
       function getDeviceIcon(type) {
-        const icons = {
-          'desktop': '&#x1F5A5;',
-          'mobile': '&#x1F4F1;',
-          'web': '&#x1F310;',
-          'p2p': '&#x1F517;'
-        };
-        return icons[type] || '&#x1F4BB;';
+        if (!type) return '&#x1F4BB;';
+        const lower = type.toLowerCase();
+        if (lower.includes('mobile') || lower.includes('android') || lower.includes('ios') || lower.includes('phone')) {
+          return '&#x1F4F1;';
+        }
+        if (lower.includes('desktop') || lower.includes('windows') || lower.includes('mac') || lower.includes('linux')) {
+          return '&#x1F5A5;';
+        }
+        if (lower.includes('web') || lower.includes('browser')) {
+          return '&#x1F310;';
+        }
+        if (lower.includes('p2p')) {
+          return '&#x1F517;';
+        }
+        return '&#x1F4BB;';
       }
 
       // Load stats
@@ -686,15 +694,18 @@
           return;
         }
 
-        container.innerHTML = activeDevices.map(device => `
-          <div class="device-card ${device.online ? 'online' : ''}">
-            <div class="device-status"></div>
-            <div class="device-icon">${getDeviceIcon(device.deviceType)}</div>
-            <div class="device-name" onclick="showRenameModal('${device.id}', '${escapeHtml(device.friendlyName || '')}')">${escapeHtml(device.displayName)}</div>
-            <div class="device-info">${device.osInfo || device.deviceType || 'Unknown'}</div>
-            <div class="device-info">${device.online ? 'Online' : 'Last seen ' + formatTime(device.lastSeen)}</div>
-          </div>
-        `).join('');
+        container.innerHTML = activeDevices.map(device => {
+          const typeAndIp = [device.osInfo || device.deviceType || 'Device', device.ipAddress].filter(Boolean).join(' &bull; ');
+          return `
+            <div class="device-card ${device.online ? 'online' : ''}">
+              <div class="device-status"></div>
+              <div class="device-icon">${getDeviceIcon(device.deviceType || device.osInfo)}</div>
+              <div class="device-name" onclick="showRenameModal('${device.id}', '${escapeHtml(device.friendlyName || '')}')" title="Click to rename">${escapeHtml(device.displayName)}</div>
+              <div class="device-info">${typeAndIp}</div>
+              <div class="device-info">${device.online ? '<span style="color: #2ecc71; font-weight: 500;">● Online</span>' : 'Last seen ' + formatTime(device.lastSeen)}</div>
+            </div>
+          `;
+        }).join('');
       }
 
       function getActiveDevices() {
@@ -759,21 +770,32 @@
           return;
         }
 
-        tbody.innerHTML = items.map(item => `
-          <tr data-id="${item.id}">
-            <td><input type="checkbox" class="item-checkbox" value="${item.id}" onchange="updateSelection()"></td>
-            <td>${escapeHtml(item.deviceName || 'Unknown')}</td>
-            <td>${formatTime(item.createdAt)}</td>
-            <td><span class="type-badge ${item.payloadType}">${item.payloadType}</span></td>
-            <td class="payload-preview" onclick="viewItem(${item.id})">${escapeHtml(item.payloadPreview || '')}</td>
-            <td>${formatSize(item.payloadSize)}</td>
-            <td class="actions">
-              <button class="btn-icon" onclick="viewItem(${item.id})" title="View">&#x1F441;</button>
-              <button class="btn-icon" onclick="copyItem(${item.id})" title="Copy">&#x1F4CB;</button>
-              <button class="btn-icon" onclick="deleteItem(${item.id})" title="Delete">&#x1F5D1;</button>
-            </td>
-          </tr>
-        `).join('');
+        tbody.innerHTML = items.map(item => {
+          let previewHtml = escapeHtml(item.payloadPreview || '');
+          if (item.payloadType === 'image' && item.payload) {
+            previewHtml = `
+              <div style="display: inline-flex; align-items: center; gap: 8px;">
+                <img src="data:image/png;base64,${item.payload}" alt="Preview" style="max-height: 42px; max-width: 70px; object-fit: contain; border-radius: 4px; border: 1px solid #dee2e6; background: #f8f9fa; vertical-align: middle;">
+                <span style="font-size: 0.8rem; color: #6c757d;">${formatSize(item.payloadSize)}</span>
+              </div>
+            `;
+          }
+          return `
+            <tr data-id="${item.id}">
+              <td><input type="checkbox" class="item-checkbox" value="${item.id}" onchange="updateSelection()"></td>
+              <td>${escapeHtml(item.deviceName || 'Unknown')}</td>
+              <td>${formatTime(item.createdAt)}</td>
+              <td><span class="type-badge ${item.payloadType}">${item.payloadType}</span></td>
+              <td class="payload-preview" onclick="viewItem(${item.id})">${previewHtml}</td>
+              <td>${formatSize(item.payloadSize)}</td>
+              <td class="actions">
+                <button class="btn-icon" onclick="viewItem(${item.id})" title="View">&#x1F441;</button>
+                <button class="btn-icon" onclick="copyItem(${item.id})" title="Copy">&#x1F4CB;</button>
+                <button class="btn-icon" onclick="deleteItem(${item.id})" title="Delete">&#x1F5D1;</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
 
         updatePagination(data);
       }
@@ -929,26 +951,101 @@
         return Math.max(0, (cleaned.length * 3) / 4 - padding);
       }
 
-      function copyToClipboard() {
+      async function copyTextToClipboard(text) {
+        if (text === null || text === undefined) return false;
+        if (navigator.clipboard && window.isSecureContext && typeof navigator.clipboard.writeText === 'function') {
+          try {
+            await navigator.clipboard.writeText(text);
+            return true;
+          } catch (err) {
+            console.warn('navigator.clipboard.writeText failed, using execCommand fallback', err);
+          }
+        }
+        try {
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          textArea.style.opacity = '0';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textArea);
+          return successful;
+        } catch (err) {
+          console.error('Fallback execCommand failed:', err);
+          return false;
+        }
+      }
+
+      async function copyImageToClipboard(base64Data) {
+        try {
+          const cleanBase64 = base64Data.replace(/^data:image\/[a-z]+;base64,/, '');
+          const byteCharacters = atob(cleanBase64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: 'image/png' });
+
+          if (navigator.clipboard && window.isSecureContext && typeof navigator.clipboard.write === 'function' && typeof ClipboardItem !== 'undefined') {
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': blob })
+            ]);
+            return true;
+          }
+        } catch (err) {
+          console.warn('Image clipboard write failed:', err);
+        }
+        return false;
+      }
+
+      async function copyToClipboard() {
         if (!currentViewItem) return;
 
-        if (currentViewItem.payloadType === 'text') {
-          navigator.clipboard.writeText(currentViewItem.payload)
-            .then(() => alert('Copied to clipboard!'))
-            .catch(() => alert('Failed to copy'));
+        const payloadType = (currentViewItem.payloadType || '').toLowerCase();
+        if (payloadType === 'text') {
+          const success = await copyTextToClipboard(currentViewItem.payload || '');
+          if (success) {
+            alert('Copied to clipboard!');
+          } else {
+            alert('Failed to copy');
+          }
+        } else if (payloadType === 'image') {
+          const success = await copyImageToClipboard(currentViewItem.payload || '');
+          if (success) {
+            alert('Copied image to clipboard!');
+          } else {
+            alert('Direct image copy requires a secure (HTTPS) connection. Please use Download instead.');
+          }
         } else {
-          alert('Cannot copy non-text content directly');
+          alert('Cannot copy non-text content directly. Please use Download.');
         }
       }
 
       async function copyItem(id) {
         try {
           const item = await fetchAPI(`${API.history}/${id}`);
-          if (item.payloadType === 'text') {
-            await navigator.clipboard.writeText(item.payload);
-            alert('Copied to clipboard!');
+          const payloadType = (item.payloadType || '').toLowerCase();
+          if (payloadType === 'text') {
+            const success = await copyTextToClipboard(item.payload || '');
+            if (success) {
+              alert('Copied to clipboard!');
+            } else {
+              alert('Failed to copy');
+            }
+          } else if (payloadType === 'image') {
+            const success = await copyImageToClipboard(item.payload || '');
+            if (success) {
+              alert('Copied image to clipboard!');
+            } else {
+              alert('Direct image copy requires a secure (HTTPS) connection. Please use Download instead.');
+            }
           } else {
-            alert('Cannot copy non-text content directly');
+            alert('Cannot copy non-text content directly. Please use Download.');
           }
         } catch (e) {
           alert('Failed to copy');

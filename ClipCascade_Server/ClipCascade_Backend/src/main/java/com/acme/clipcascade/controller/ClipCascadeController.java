@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 
 import com.acme.clipcascade.config.ClipCascadeProperties;
+import com.acme.clipcascade.config.WebSocketEventListener;
 import com.acme.clipcascade.constants.RoleConstants;
 import com.acme.clipcascade.constants.ServerConstants;
 import com.acme.clipcascade.model.ClipboardData;
@@ -215,6 +216,9 @@ public class ClipCascadeController {
             String osInfo = null;
             Map<String, Object> metadata = clipboardData.getMetadata();
 
+            String friendlyName = null;
+            String ipAddress = null;
+
             // First try to get deviceId from metadata (sent by client)
             if (metadata != null && metadata.containsKey("deviceId")) {
                 Object deviceIdObj = metadata.get("deviceId");
@@ -228,11 +232,29 @@ public class ClipCascadeController {
                 Object osInfoObj = metadata.get("osInfo");
                 osInfo = osInfoObj != null ? osInfoObj.toString() : null;
             }
+            if (metadata != null && metadata.containsKey("friendlyName")) {
+                Object fnObj = metadata.get("friendlyName");
+                friendlyName = fnObj != null ? fnObj.toString() : null;
+            }
+            if (headerAccessor != null && headerAccessor.getSessionAttributes() != null) {
+                if (ipAddress == null) {
+                    ipAddress = (String) headerAccessor.getSessionAttributes().get("ipAddress");
+                }
+                if (deviceType == null) {
+                    deviceType = WebSocketEventListener.inferDeviceType((String) headerAccessor.getSessionAttributes().get("userAgent"), null);
+                }
+                if (osInfo == null) {
+                    osInfo = WebSocketEventListener.inferOsInfo((String) headerAccessor.getSessionAttributes().get("userAgent"), null);
+                }
+            }
             if (deviceType != null && deviceType.length() > 50) {
                 deviceType = deviceType.substring(0, 50);
             }
             if (osInfo != null && osInfo.length() > 100) {
                 osInfo = osInfo.substring(0, 100);
+            }
+            if (friendlyName != null && friendlyName.length() > 100) {
+                friendlyName = friendlyName.substring(0, 100);
             }
 
             // If no deviceId in metadata, try to get it from the WebSocket session
@@ -246,7 +268,7 @@ public class ClipCascadeController {
 
             String sessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
             if (deviceId != null && !deviceId.isEmpty()) {
-                deviceService.registerDevice(deviceId, userPrincipal.getUsername(), deviceType, osInfo);
+                deviceService.registerDevice(deviceId, userPrincipal.getUsername(), deviceType, osInfo, ipAddress, friendlyName);
                 if (sessionId != null) {
                     deviceService.markDeviceOnline(deviceId, sessionId);
                 }

@@ -1,19 +1,27 @@
 package com.acme.clipcascade.config;
 
+import java.util.Map;
 import org.springframework.lang.NonNull;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.server.ServerHttpRequest;
+import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
+import org.springframework.web.socket.server.HandshakeInterceptor;
 import org.springframework.web.socket.server.standard.ServletServerContainerFactoryBean;
 
 import com.acme.clipcascade.constants.ServerConstants;
+import com.acme.clipcascade.utils.IpAddressResolver;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -71,7 +79,34 @@ public class StompWebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(@NonNull StompEndpointRegistry registry) {
         // Clients will connect to this endpoint for WebSocket communication.
         registry.addEndpoint("/clipsocket")
-                .setAllowedOrigins(clipCascadeProperties.getAllowedOrigins());
+                .setAllowedOrigins(clipCascadeProperties.getAllowedOrigins())
+                .addInterceptors(new HandshakeInterceptor() {
+                    @Override
+                    public boolean beforeHandshake(
+                            @NonNull ServerHttpRequest request,
+                            @NonNull ServerHttpResponse response,
+                            @NonNull WebSocketHandler wsHandler,
+                            @NonNull Map<String, Object> attributes) {
+                        if (request instanceof ServletServerHttpRequest servletRequest) {
+                            HttpServletRequest httpRequest = servletRequest.getServletRequest();
+                            String ip = IpAddressResolver.getIpAddressFromRequest(httpRequest);
+                            attributes.put("ipAddress", ip);
+                            String userAgent = httpRequest.getHeader("User-Agent");
+                            if (userAgent != null && !userAgent.isEmpty()) {
+                                attributes.put("userAgent", userAgent);
+                            }
+                        }
+                        return true;
+                    }
+
+                    @Override
+                    public void afterHandshake(
+                            @NonNull ServerHttpRequest request,
+                            @NonNull ServerHttpResponse response,
+                            @NonNull WebSocketHandler wsHandler,
+                            Exception exception) {
+                    }
+                });
     }
 
     // Scheduler for WebSocket heartbeats

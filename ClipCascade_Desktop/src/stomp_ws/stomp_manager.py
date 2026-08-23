@@ -62,7 +62,23 @@ class STOMPManager(WSInterface):
                 on_close_callback=self._on_close,
                 sslopt=websocket_sslopt_for_config(self.config),
             )
+            import platform
+            import socket
+
+            hostname = socket.gethostname()
+            device_id = self.config.data.get("device_id")
+            if not device_id:
+                device_id = f"desktop-{hostname}"
+
+            connect_headers = {
+                "deviceId": device_id,
+                "deviceType": "desktop",
+                "osInfo": f"{platform.system()} {platform.release()}",
+                "friendlyName": hostname,
+            }
+
             self.client.connect(
+                headers=connect_headers,
                 timeout=WEBSOCKET_TIMEOUT,
                 connectCallback=lambda _: self.client.subscribe(  # receive event
                     destination=SUBSCRIPTION_DESTINATION,

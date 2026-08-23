@@ -120,9 +120,22 @@ public class P2PWebSocketHandler extends AbstractWebSocketHandler {
 
             sendMessage(session, jsonStr);
 
+            String ipAddress = null;
+            String userAgent = null;
+            Map<String, Object> attributes = session.getAttributes();
+            if (attributes != null) {
+                ipAddress = (String) attributes.get("ipAddress");
+                userAgent = (String) attributes.get("userAgent");
+            }
+            if (ipAddress == null && session.getRemoteAddress() != null && session.getRemoteAddress().getAddress() != null) {
+                ipAddress = session.getRemoteAddress().getAddress().getHostAddress();
+            }
+            String deviceType = WebSocketEventListener.inferDeviceType(userAgent, "p2p");
+            String osInfo = WebSocketEventListener.inferOsInfo(userAgent, null);
+
             // Register device and mark as online
             try {
-                deviceService.registerDevice(peerId, username, "p2p", null);
+                deviceService.registerDevice(peerId, username, deviceType, osInfo, ipAddress, null);
                 deviceService.markDeviceOnline(peerId, session.getId());
             } catch (Exception e) {
                 logger.debug("Failed to register device: {}", e.getMessage());

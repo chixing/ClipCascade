@@ -30,4 +30,20 @@ public class IpAddressResolver {
 
         return request.getRemoteAddr();
     }
+
+    public static String getIpAddressFromRequest(HttpServletRequest request) {
+        if (request == null) {
+            return "0.0.0.0";
+        }
+        for (String header : IpResolverConstants.IP_HEADER_CANDIDATES) {
+            String ipList = request.getHeader(header);
+            if (ipList != null
+                    && !ipList.isEmpty()
+                    && !IpResolverConstants.UNKNOWN.equalsIgnoreCase(ipList)) {
+
+                return ipList.split(",")[0].trim();
+            }
+        }
+        return request.getRemoteAddr();
+    }
 }

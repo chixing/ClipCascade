@@ -27,19 +27,34 @@ public class DeviceService {
 
     @Transactional
     public Device registerDevice(String deviceId, String username, String deviceType, String osInfo) {
+        return registerDevice(deviceId, username, deviceType, osInfo, null, null);
+    }
+
+    @Transactional
+    public Device registerDevice(String deviceId, String username, String deviceType, String osInfo, String ipAddress, String friendlyName) {
         Device device = deviceRepo.findById(deviceId).orElse(null);
 
         if (device == null) {
             device = new Device(deviceId, username);
             device.setDeviceType(deviceType);
             device.setOsInfo(osInfo);
+            device.setIpAddress(ipAddress);
+            if (friendlyName != null && !friendlyName.trim().isEmpty()) {
+                device.setFriendlyName(friendlyName.trim());
+            }
         } else {
             device.setLastSeen(System.currentTimeMillis() / 1000);
-            if (deviceType != null) {
-                device.setDeviceType(deviceType);
+            if (deviceType != null && !deviceType.trim().isEmpty()) {
+                device.setDeviceType(deviceType.trim());
             }
-            if (osInfo != null) {
-                device.setOsInfo(osInfo);
+            if (osInfo != null && !osInfo.trim().isEmpty()) {
+                device.setOsInfo(osInfo.trim());
+            }
+            if (ipAddress != null && !ipAddress.trim().isEmpty()) {
+                device.setIpAddress(ipAddress.trim());
+            }
+            if (friendlyName != null && !friendlyName.trim().isEmpty()) {
+                device.setFriendlyName(friendlyName.trim());
             }
         }
 

@@ -28,6 +28,9 @@ public class Device {
     @Column(length = 100)
     private String osInfo;
 
+    @Column(length = 100)
+    private String ipAddress;
+
     private Long firstSeen;
 
     private Long lastSeen;
@@ -46,11 +49,16 @@ public class Device {
     }
 
     public Device(String id, String username, String friendlyName, String deviceType, String osInfo) {
+        this(id, username, friendlyName, deviceType, osInfo, null);
+    }
+
+    public Device(String id, String username, String friendlyName, String deviceType, String osInfo, String ipAddress) {
         this.id = id;
         this.username = username;
         this.friendlyName = friendlyName;
         this.deviceType = deviceType;
         this.osInfo = osInfo;
+        this.ipAddress = ipAddress;
         this.firstSeen = System.currentTimeMillis() / 1000;
         this.lastSeen = this.firstSeen;
     }
@@ -119,17 +127,33 @@ public class Device {
         this.online = online;
     }
 
+    public String getIpAddress() {
+        return this.ipAddress;
+    }
+
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
+    }
+
     public String getDisplayName() {
-        if (this.friendlyName != null && !this.friendlyName.isEmpty()) {
+        if (this.friendlyName != null && !this.friendlyName.trim().isEmpty()) {
             return this.friendlyName;
         }
-        if (this.id == null || this.id.isEmpty()) {
-            return "Unknown Device";
+        StringBuilder sb = new StringBuilder();
+        if (this.osInfo != null && !this.osInfo.trim().isEmpty() && !"Unknown OS".equalsIgnoreCase(this.osInfo.trim())) {
+            sb.append(this.osInfo);
+        } else if (this.deviceType != null && !this.deviceType.trim().isEmpty() && !"unknown".equalsIgnoreCase(this.deviceType.trim())) {
+            sb.append(Character.toUpperCase(this.deviceType.charAt(0))).append(this.deviceType.substring(1));
+        } else {
+            sb.append("Device");
         }
-        if (this.deviceType != null && !this.deviceType.isEmpty()) {
-            return this.deviceType + " (" + this.id.substring(0, Math.min(8, this.id.length())) + ")";
+
+        if (this.ipAddress != null && !this.ipAddress.trim().isEmpty() && !"0.0.0.0".equals(this.ipAddress)) {
+            sb.append(" (").append(this.ipAddress).append(")");
+        } else if (this.id != null && !this.id.isEmpty()) {
+            sb.append(" (").append(this.id.substring(0, Math.min(8, this.id.length()))).append(")");
         }
-        return this.id.substring(0, Math.min(8, this.id.length()));
+        return sb.toString();
     }
 
     @Override
@@ -140,6 +164,7 @@ public class Device {
                 ", friendlyName='" + getFriendlyName() + "'" +
                 ", deviceType='" + getDeviceType() + "'" +
                 ", osInfo='" + getOsInfo() + "'" +
+                ", ipAddress='" + getIpAddress() + "'" +
                 ", firstSeen='" + getFirstSeen() + "'" +
                 ", lastSeen='" + getLastSeen() + "'" +
                 ", online='" + isOnline() + "'" +

@@ -32,9 +32,11 @@ CREATE TABLE IF NOT EXISTS devices (
     friendly_name VARCHAR(100),                    -- User-assigned friendly name
     device_type VARCHAR(50),                       -- desktop, mobile, web
     os_info VARCHAR(100),                          -- OS information (Windows 11, Android 14, etc.)
+    ip_address VARCHAR(100),                       -- IP address of connected device
     first_seen BIGINT,                             -- Timestamp when device first connected
     last_seen BIGINT                               -- Timestamp when device last connected
 );
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS ip_address VARCHAR(100);
 CREATE INDEX IF NOT EXISTS idx_devices_username ON devices(username);
 
 -- query to create the table clipboard_history if it doesn't exist (Java: ClipboardHistory.class)

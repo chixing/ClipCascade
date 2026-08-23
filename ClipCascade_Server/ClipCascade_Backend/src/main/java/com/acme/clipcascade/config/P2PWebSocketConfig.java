@@ -1,11 +1,20 @@
 package com.acme.clipcascade.config;
 
+import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.server.ServerHttpRequest;
+import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.lang.NonNull;
+import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+import org.springframework.web.socket.server.HandshakeInterceptor;
+
+import com.acme.clipcascade.utils.IpAddressResolver;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Configuration
 @EnableWebSocket
@@ -26,6 +35,33 @@ public class P2PWebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
         registry.addHandler(p2pWebSocketHandler, "/p2psignaling")
-                .setAllowedOrigins(clipCascadeProperties.getAllowedOrigins());
+                .setAllowedOrigins(clipCascadeProperties.getAllowedOrigins())
+                .addInterceptors(new HandshakeInterceptor() {
+                    @Override
+                    public boolean beforeHandshake(
+                            @NonNull ServerHttpRequest request,
+                            @NonNull ServerHttpResponse response,
+                            @NonNull WebSocketHandler wsHandler,
+                            @NonNull Map<String, Object> attributes) {
+                        if (request instanceof ServletServerHttpRequest servletRequest) {
+                            HttpServletRequest httpRequest = servletRequest.getServletRequest();
+                            String ip = IpAddressResolver.getIpAddressFromRequest(httpRequest);
+                            attributes.put("ipAddress", ip);
+                            String userAgent = httpRequest.getHeader("User-Agent");
+                            if (userAgent != null && !userAgent.isEmpty()) {
+                                attributes.put("userAgent", userAgent);
+                            }
+                        }
+                        return true;
+                    }
+
+                    @Override
+                    public void afterHandshake(
+                            @NonNull ServerHttpRequest request,
+                            @NonNull ServerHttpResponse response,
+                            @NonNull WebSocketHandler wsHandler,
+                            Exception exception) {
+                    }
+                });
     }
 }

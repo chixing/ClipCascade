@@ -112,11 +112,19 @@ function getWebDeviceInfo() {
     return WEB_DEVICE_INFO;
   }
   const deviceId = getOrCreateDeviceId();
-  const osInfo = navigator.userAgent || navigator.platform || "web";
+  let osInfo = "Web Browser";
+  const ua = navigator.userAgent || "";
+  if (ua.includes("Win")) osInfo = "Windows (Web)";
+  else if (ua.includes("Mac")) osInfo = "macOS (Web)";
+  else if (ua.includes("Android")) osInfo = "Android (Web)";
+  else if (ua.includes("Linux")) osInfo = "Linux (Web)";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) osInfo = "iOS (Web)";
+
   WEB_DEVICE_INFO = {
     deviceId,
     deviceType: DEVICE_TYPE_WEB,
     osInfo,
+    friendlyName: `Web Browser (${osInfo})`,
   };
   return WEB_DEVICE_INFO;
 }
@@ -313,13 +321,42 @@ function downloadFile(filename, base64Content) {
   URL.revokeObjectURL(url);
 }
 function copyToClipboard(text) {
-  navigator.clipboard
-    .writeText(text)
-    .then(() => console.log("Text copied to clipboard."))
-    .catch((err) => {
-      console.error("Could not copy text: ", err);
+  if (text === null || text === undefined) return;
+  if (navigator.clipboard && window.isSecureContext && typeof navigator.clipboard.writeText === "function") {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => console.log("Text copied to clipboard."))
+      .catch((err) => {
+        console.warn("navigator.clipboard.writeText failed, using fallback:", err);
+        fallbackCopyToClipboard(text);
+      });
+  } else {
+    fallbackCopyToClipboard(text);
+  }
+}
+
+function fallbackCopyToClipboard(text) {
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-999999px";
+    textArea.style.top = "-999999px";
+    textArea.style.opacity = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const successful = document.execCommand("copy");
+    document.body.removeChild(textArea);
+    if (successful) {
+      console.log("Text copied to clipboard via fallback.");
+    } else {
       alert("Failed to copy to clipboard.");
-    });
+    }
+  } catch (err) {
+    console.error("Could not copy text: ", err);
+    alert("Failed to copy to clipboard.");
+  }
 }
 function showModal(modalSelector) {
   $(modalSelector).css("display", "flex");
@@ -511,6 +548,7 @@ function connectStomp() {
       deviceId: deviceInfo.deviceId,
       deviceType: deviceInfo.deviceType,
       osInfo: deviceInfo.osInfo,
+      friendlyName: deviceInfo.friendlyName,
     },
   });
 
@@ -560,6 +598,7 @@ function sendTextToServerStomp(textVal) {
         deviceId: deviceInfo.deviceId,
         deviceType: deviceInfo.deviceType,
         osInfo: deviceInfo.osInfo,
+        friendlyName: deviceInfo.friendlyName,
       },
     }),
   });
