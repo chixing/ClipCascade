@@ -236,9 +236,18 @@ public class ClipCascadeController {
                 Object fnObj = metadata.get("friendlyName");
                 friendlyName = fnObj != null ? fnObj.toString() : null;
             }
+            if (metadata != null && metadata.containsKey("ipAddress")) {
+                Object ipObj = metadata.get("ipAddress");
+                if (ipObj != null && !ipObj.toString().trim().isEmpty()) {
+                    ipAddress = ipObj.toString().trim();
+                }
+            }
             if (headerAccessor != null && headerAccessor.getSessionAttributes() != null) {
-                if (ipAddress == null) {
-                    ipAddress = (String) headerAccessor.getSessionAttributes().get("ipAddress");
+                if (ipAddress == null || ipAddress.isEmpty() || "0.0.0.0".equals(ipAddress) || "172.20.0.1".equals(ipAddress)) {
+                    String attrIp = (String) headerAccessor.getSessionAttributes().get("ipAddress");
+                    if (attrIp != null && !attrIp.isEmpty()) {
+                        ipAddress = attrIp;
+                    }
                 }
                 if (deviceType == null) {
                     deviceType = WebSocketEventListener.inferDeviceType((String) headerAccessor.getSessionAttributes().get("userAgent"), null);
