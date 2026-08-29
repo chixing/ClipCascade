@@ -843,24 +843,73 @@ public class ClipCascadeController {
             return ResponseEntity.badRequest().build();
         }
 
+        byte[] pngBytes = convertImageToPng(raw);
+        if (pngBytes != null) {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.IMAGE_PNG);
+            headers.setCacheControl("max-age=86400, public");
+            return new ResponseEntity<>(pngBytes, headers, HttpStatus.OK);
+        }
+
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).build();
+    }
+
+    private byte[] convertImageToPng(byte[] raw) {
+        if (raw == null || raw.length == 0) {
+            return null;
+        }
+
+        // Standard PNG check: \x89PNG\r\n\x1a\n
+        if (raw.length >= 8 && raw[0] == (byte) 0x89 && raw[1] == (byte) 0x50 && raw[2] == (byte) 0x4E && raw[3] == (byte) 0x47) {
+            return raw;
+        }
+
+        byte[] inputBytes = raw;
+
+        // Check if raw is Windows DIB format (ShareX / CF_DIB starting with BITMAPINFOHEADER biSize >= 40)
+        if (raw.length >= 40) {
+            java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(raw).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            int biSize = bb.getInt(0);
+            if (biSize >= 40 && biSize <= 124) {
+                int bitCount = bb.getShort(14) & 0xFFFF;
+                int compression = bb.getInt(16);
+                int offset = 14 + biSize;
+                if (compression == 3) {
+                    offset += 12;
+                } else if (bitCount <= 8) {
+                    int clrUsed = bb.getInt(32);
+                    if (clrUsed == 0 && bitCount > 0) {
+                        clrUsed = 1 << bitCount;
+                    }
+                    offset += clrUsed * 4;
+                }
+
+                int fileSize = 14 + raw.length;
+                byte[] bmp = new byte[fileSize];
+                bmp[0] = 'B';
+                bmp[1] = 'M';
+                java.nio.ByteBuffer bmpHeader = java.nio.ByteBuffer.wrap(bmp).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+                bmpHeader.putInt(2, fileSize);
+                bmpHeader.putShort(6, (short) 0);
+                bmpHeader.putShort(8, (short) 0);
+                bmpHeader.putInt(10, offset);
+                System.arraycopy(raw, 0, bmp, 14, raw.length);
+                inputBytes = bmp;
+            }
+        }
+
         try {
-            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(raw);
+            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(inputBytes);
             BufferedImage img = ImageIO.read(bais);
             if (img != null) {
                 java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
                 ImageIO.write(img, "PNG", baos);
-                byte[] pngBytes = baos.toByteArray();
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.IMAGE_PNG);
-                headers.setCacheControl("max-age=86400, public");
-                return new ResponseEntity<>(pngBytes, headers, HttpStatus.OK);
+                return baos.toByteArray();
             }
         } catch (Exception ignored) {
         }
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.IMAGE_PNG);
-        return new ResponseEntity<>(raw, headers, HttpStatus.OK);
+        return null;
     }
 
     @DeleteMapping("/admin/clipboard-history")
@@ -980,6 +1029,12 @@ public class ClipCascadeController {
         if ("image".equals(payloadType)) {
             contentType = "image/png";
             extension = "png";
+            byte[] decoded = safeBase64Decode(payload);
+            byte[] pngBytes = convertImageToPng(decoded);
+            if (pngBytes != null) {
+                return new DecodedPayload(pngBytes, contentType, "clipboard-" + item.getId() + "." + extension);
+            }
+            return new DecodedPayload(decoded, contentType, "clipboard-" + item.getId() + "." + extension);
         } else {
             extension = defaultExtension(payloadType);
         }
