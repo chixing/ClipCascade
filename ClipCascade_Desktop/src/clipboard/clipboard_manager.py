@@ -57,7 +57,9 @@ class ClipboardManager:
 
     @staticmethod
     def hash_clipboard(clipboard: str) -> int:
-        return xxhash.xxh64(clipboard).intdigest()
+        # xxhash 4.x requires bytes; 3.x accepted str. Encode for both.
+        data = clipboard.encode("utf-8") if isinstance(clipboard, str) else clipboard
+        return xxhash.xxh64(data).intdigest()
 
     def is_clipboard_size_within_limit(
         self, clipboard_content: any, type_: str = "text"
