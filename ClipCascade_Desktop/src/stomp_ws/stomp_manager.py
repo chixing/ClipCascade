@@ -11,6 +11,7 @@ from clipboard.clipboard_manager import ClipboardManager
 from utils.notification_manager import NotificationManager
 from utils.request_manager import RequestManager
 from utils.ssl_helper import websocket_sslopt_for_config
+from utils.device_identity import get_device_info
 from core.constants import *
 
 if PLATFORM.startswith(LINUX) and LINUX_USE_CLI_UI:
@@ -63,6 +64,7 @@ class STOMPManager(WSInterface):
                 sslopt=websocket_sslopt_for_config(self.config),
             )
             self.client.connect(
+                headers=get_device_info(self.config),
                 timeout=WEBSOCKET_TIMEOUT,
                 connectCallback=lambda _: self.client.subscribe(  # receive event
                     destination=SUBSCRIPTION_DESTINATION,
@@ -113,7 +115,11 @@ class STOMPManager(WSInterface):
                         payload = CipherManager.encode_to_json_string(
                             **self.cipher_manager.encrypt(payload)
                         )
-                    body = json.dumps({"payload": payload, "type": payload_type})
+                    body = json.dumps({
+                        "payload": payload,
+                        "type": payload_type,
+                        "metadata": get_device_info(self.config),
+                    })
                     self.client.send(destination=SEND_DESTINATION, body=body)
         except Exception as e:
             logging.error(f"Failed to send data: {e}")
