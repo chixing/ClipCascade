@@ -14,6 +14,7 @@ from clipboard.clipboard_manager import ClipboardManager
 from utils.notification_manager import NotificationManager
 from utils.request_manager import RequestManager
 from utils.ssl_helper import websocket_sslopt_for_config
+from utils.device_identity import get_device_info
 from core.constants import *
 from aiortc import (
     RTCPeerConnection,
@@ -158,7 +159,10 @@ class P2PManager(WSInterface):
 
             self.ws_client = websocket.WebSocketApp(
                 url=self.config.data["websocket_url"],
-                header={"Cookie": RequestManager.format_cookie(self.config.data["cookie"])},
+                header={
+                    "Cookie": RequestManager.format_cookie(self.config.data["cookie"]),
+                    "X-ClipCascade-Device-Id": get_device_info(self.config)["deviceId"],
+                },
                 on_open=self._on_ws_open,
                 on_error=self._on_ws_error,
                 on_message=self._on_ws_message,

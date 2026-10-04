@@ -12,3 +12,11 @@ screenshots/
 .env.*
 !.env.example
 !.env.sample
+
+# Native-client installation metadata and atomic temporary files
+*.device-id
+*.device-id.*
+
+# Python build/test caches
+__pycache__/
+*.py[cod]
