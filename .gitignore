@@ -2,3 +2,13 @@ private/
 screenshots/
 .DS_Store
 .vscode/
+# Runtime databases and credentials belong outside source control.
+**/cc_users/
+*.mv.db
+*.h2.db
+*.trace.db
+*.lock.db
+.env
+.env.*
+!.env.example
+!.env.sample
