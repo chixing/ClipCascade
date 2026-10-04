@@ -1,0 +1,11 @@
+.git
+target
+database
+logs
+cc_users
+**/*.mv.db
+**/*.h2.db
+**/*.trace.db
+**/*.lock.db
+.env
+.env.*

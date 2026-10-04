@@ -1,0 +1,115 @@
+name: Server tests and image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ClipCascade_Server/**
+      - .github/workflows/server.yml
+      - .gitignore
+  pull_request:
+    paths:
+      - ClipCascade_Server/**
+      - .github/workflows/server.yml
+      - .gitignore
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reject tracked runtime databases
+        shell: bash
+        run: |
+          clip_databases=$(git ls-files '*.mv.db' '*.h2.db' '*.trace.db' '*.lock.db')
+          if [ -n "$clip_databases" ]; then
+            printf '%s\n' 'Runtime database files must not be tracked.' "$clip_databases"
+            exit 1
+          fi
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: ClipCascade_Server/ClipCascade_Backend/pom.xml
+      - name: Test and package the server
+        working-directory: ClipCascade_Server/ClipCascade_Backend
+        run: ./mvnw -B verify
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the runtime image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./ClipCascade_Server/ClipCascade_Backend
+          load: true
+          tags: clipcascade:ci-test
+          cache-from: type=gha,scope=clipcascade-server
+          cache-to: type=gha,scope=clipcascade-server,mode=max
+      - name: Check the packaged server
+        shell: bash
+        run: |
+          trap 'docker rm -f clipcascade-ci >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name clipcascade-ci \
+            --publish 127.0.0.1:18086:8080 \
+            --env 'CC_SERVER_DB_URL=jdbc:h2:mem:smoke;MODE=PostgreSQL;DB_CLOSE_DELAY=-1' \
+            --env CC_SERVER_DB_USERNAME=sa --env CC_SERVER_DB_PASSWORD= \
+            --env CC_DONATIONS_ENABLED=false clipcascade:ci-test
+          for clip_attempt in $(seq 1 90); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:18086/health; then
+              curl --fail --silent --output /dev/null http://127.0.0.1:18086/login
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs --tail 80 clipcascade-ci
+          exit 1
+
+  publish:
+    needs: verify
+    if: github.repository == 'chixing/ClipCascade' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select versioned image names
+        id: image
+        shell: bash
+        run: |
+          clip_image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf 'name=%s\n' "$clip_image" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tested server
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./ClipCascade_Server/ClipCascade_Backend
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+            ${{ steps.image.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=GPL-3.0
+          cache-from: type=gha,scope=clipcascade-server
+          cache-to: type=gha,scope=clipcascade-server,mode=max
