@@ -3,7 +3,6 @@ import {
   NativeModules,
   DeviceEventEmitter,
   Alert,
-  Platform,
 } from 'react-native';
 
 import notifee, { AndroidImportance } from '@notifee/react-native';
@@ -25,7 +24,6 @@ import {
   getMultipleDataFromAsyncStorage,
   clearAsyncStorage,
 } from './AsyncStorageManagement';
-import { getOrCreateDeviceId, withDeviceIdQuery } from './DeviceIdentity';
 
 function cleanupClipboardListeners() {
   DeviceEventEmitter.removeAllListeners('SHARED_TEXT');
@@ -90,14 +88,6 @@ module.exports = async (inputData = null) => {
         ]);
 
         const maxsize = Number(maxsizeStr);
-        const deviceInfo = {
-          deviceId: await getOrCreateDeviceId({
-            get: getDataFromAsyncStorage,
-            set: setDataInAsyncStorage,
-          }),
-          deviceType: 'mobile',
-          osInfo: Platform.OS === 'android' ? `Android (API ${Platform.Version})` : `${Platform.OS} ${Platform.Version}`,
-        };
         let max_clipboard_size_local_limit_bytes = Number(maxClipboardLimitStr);
         if (max_clipboard_size_local_limit_bytes === 0) {
           max_clipboard_size_local_limit_bytes = maxsize;
@@ -387,7 +377,6 @@ module.exports = async (inputData = null) => {
           // websocket stomp client
           stompClient = new Client({
             brokerURL: websocket_url,
-            connectHeaders: deviceInfo,
             reconnectDelay: RECONNECT_WS_TIMER,
             connectionTimeout: 5000,
             heartbeatIncoming: HEARTBEAT_INTERVAL,
@@ -575,7 +564,6 @@ module.exports = async (inputData = null) => {
                         body: JSON.stringify({
                           payload: String(clipContent),
                           type: type_,
-                          metadata: deviceInfo,
                         }),
                       });
                     }
@@ -756,7 +744,7 @@ module.exports = async (inputData = null) => {
 
           const initializeWebSocketSignalingClient = async () => {
             if (wsSignalingClient == null) {
-              wsSignalingClient = new WebSocket(withDeviceIdQuery(websocket_url, deviceInfo.deviceId));
+              wsSignalingClient = new WebSocket(websocket_url);
 
               wsSignalingClient.onopen = async () => {
                 await cleanupPeerConnections();
