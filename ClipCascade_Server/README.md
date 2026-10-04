@@ -17,11 +17,18 @@ This directory contains the customized Spring Boot backend and Docker Compose de
 
 ### 3. Historical Database
 * Configured volume `./cc_users:/database` with database URL `jdbc:h2:file:/database/clipcascade`.
-* Retains all 2,000+ past clipboard clips across container recreation.
+* Retains clipboard history across container recreation.
+* Database files, credentials and backups are private runtime data. Keep them outside Git and the Docker build context.
 
 ### 4. Thread-Safe Device Registration
 * `DeviceService.registerDevice()` is synchronized and includes database fallback handling to prevent race conditions during concurrent WebSocket connections.
 
 ## Directory Structure
 * `ClipCascade_Backend/`: Spring Boot (Java 21) backend application.
-* `docker-compose/`: Docker Compose configuration and persistent database storage (`./cc_users/`).
+* `docker-compose/`: Docker Compose configuration; `./cc_users/` is ignored runtime storage.
+
+## Tests and packaged versions
+
+The server workflow runs Java 21 tests against a disposable in-memory database, builds the Docker image, and checks its health and login routes. Docker builds also run the tests. Production databases and credentials are never needed for these checks.
+
+Successful builds of this fork's `main` branch publish an AMD64 server image at `ghcr.io/chixing/clipcascade:sha-<full-commit-id>` and `ghcr.io/chixing/clipcascade:latest`. Use the commit tag for a reproducible deployment. Publishing an image does not deploy it to the homelab; the Ansible rebuild procedure still controls that step.
