@@ -85,7 +85,7 @@ public class SecurityConfiguration {
 						.logoutUrl("/logout") // The URL to submit a logout request
 						.logoutSuccessUrl("/login?logout")) // Where to go after successful logout
 				.sessionManagement(session -> session
-						.sessionCreationPolicy(SessionCreationPolicy.ALWAYS) // Always create a new session
+						.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) // Keep logins persistent without creating sessions for probes
 						.maximumSessions(-1) // Allow unlimited sessions
 						.sessionRegistry(sessionRegistry()) // Use the session registry
 						.expiredSessionStrategy(new CustomExpiredSession())) // Custom expired session strategy

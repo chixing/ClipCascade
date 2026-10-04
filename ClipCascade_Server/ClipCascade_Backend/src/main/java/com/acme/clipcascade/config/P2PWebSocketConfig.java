@@ -52,6 +52,15 @@ public class P2PWebSocketConfig implements WebSocketConfigurer {
                         }
                         attributes.put("ipAddress", ip);
 
+                        String deviceId = request.getHeaders().getFirst("X-ClipCascade-Device-Id");
+                        if (deviceId == null && request instanceof ServletServerHttpRequest servletRequest) {
+                            // Browsers cannot set WebSocket handshake headers.
+                            deviceId = servletRequest.getServletRequest().getParameter("deviceId");
+                        }
+                        if (deviceId != null && !deviceId.isBlank()) {
+                            attributes.put("deviceId", deviceId);
+                        }
+
                         String userAgent = request.getHeaders().getFirst("User-Agent");
                         if (userAgent != null && !userAgent.isEmpty()) {
                             attributes.put("userAgent", userAgent);

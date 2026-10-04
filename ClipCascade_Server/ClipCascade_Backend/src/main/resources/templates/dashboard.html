@@ -107,6 +107,24 @@
         border-color: var(--primary-color);
       }
 
+      .device-remove {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: none;
+        border: none;
+        font-size: 1.1rem;
+        color: #adb5bd;
+        cursor: pointer;
+        line-height: 1;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+
+      .device-remove:hover {
+        color: #e03131;
+      }
+
       .device-card.online {
         border-color: var(--success-color);
       }
@@ -444,14 +462,19 @@
         <div class="history-controls">
           <input type="text" id="search-input" class="form-control search-box"
                  placeholder="Search clipboard content..." onkeyup="debounceSearch()">
-          <select id="filter-device" class="form-select" onchange="loadHistory()">
+          <select id="filter-device" class="form-select" onchange="currentPage=0; loadHistory()">
             <option value="">All Devices</option>
           </select>
-          <select id="filter-type" class="form-select" onchange="loadHistory()">
+          <select id="filter-type" class="form-select" onchange="currentPage=0; loadHistory()">
             <option value="">All Types</option>
             <option value="text">Text</option>
             <option value="image">Image</option>
             <option value="files">File</option>
+          </select>
+          <select id="filter-pinned" class="form-select" aria-label="Filter pinned clips" onchange="currentPage=0; loadHistory()">
+            <option value="">All Clips</option>
+            <option value="true">Pinned</option>
+            <option value="false">Unpinned</option>
           </select>
           <button class="btn btn-outline-danger" onclick="showDeleteModal()">
             Delete...
@@ -459,6 +482,7 @@
         </div>
 
         <!-- Bulk Actions -->
+        <p class="text-muted">Pin clips to keep them during age or device cleanup. You can still delete them individually.</p>
         <div class="bulk-actions" id="bulk-actions">
           <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
           <span id="selected-count">0 selected</span>
@@ -568,7 +592,6 @@
       </div>
     </div>
 
-    <script src="/assets/js/bootstrap.bundle.min.js"></script>
     <script>
       // State
       let currentPage = 0;
@@ -711,26 +734,56 @@
           return;
         }
 
-        container.innerHTML = activeDevices.map(device => {
-          const deviceHeader = escapeHtml(device.friendlyName || device.displayName || 'Device');
+        container.replaceChildren(...activeDevices.map(device => {
+          const card = document.createElement('div');
+          card.className = `device-card ${device.online ? 'online' : ''}`;
+
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'device-remove';
+          remove.title = 'Remove device';
+          remove.textContent = '×';
+          remove.addEventListener('click', event => removeDevice(device.id, event));
+
+          const status = document.createElement('div');
+          status.className = 'device-status';
+          const icon = document.createElement('div');
+          icon.className = 'device-icon';
+          icon.innerHTML = getDeviceIcon(device.deviceType || device.osInfo);
+
+          const name = document.createElement('div');
+          name.className = 'device-name';
+          name.textContent = device.friendlyName || device.displayName || 'Device';
+          name.title = 'Click to rename';
+          name.addEventListener('click', () => showRenameModal(device.id, device.friendlyName || ''));
+
           let osText = device.osInfo;
           if (!osText || osText.toLowerCase() === 'unknown os') {
             osText = device.deviceType ? (device.deviceType.charAt(0).toUpperCase() + device.deviceType.slice(1) + ' App') : 'Connected Device';
           }
-          const osOrType = escapeHtml(osText);
-          const ipInfo = device.ipAddress ? `<span style="font-family: monospace; font-size: 0.8rem; color: #495057;">IP: ${escapeHtml(device.ipAddress)}</span>` : '';
-          return `
-            <div class="device-card ${device.online ? 'online' : ''}" style="position: relative;">
-              <button onclick="removeDevice('${device.id}', event)" title="Remove device" style="position: absolute; top: 8px; right: 8px; background: none; border: none; font-size: 1.1rem; color: #adb5bd; cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 4px;" onmouseover="this.style.color='#e03131'" onmouseout="this.style.color='#adb5bd'">&times;</button>
-              <div class="device-status"></div>
-              <div class="device-icon">${getDeviceIcon(device.deviceType || device.osInfo)}</div>
-              <div class="device-name" onclick="showRenameModal('${device.id}', '${escapeHtml(device.friendlyName || '')}')" title="Click to rename">${deviceHeader}</div>
-              <div class="device-info">${osOrType}</div>
-              ${ipInfo ? `<div class="device-info">${ipInfo}</div>` : ''}
-              <div class="device-info">${device.online ? '<span style="color: #2ecc71; font-weight: 600;">● Online</span>' : 'Last seen ' + formatTime(device.lastSeen)}</div>
-            </div>
-          `;
-        }).join('');
+          const os = document.createElement('div');
+          os.className = 'device-info';
+          os.textContent = osText;
+          card.append(remove, status, icon, name, os);
+
+          if (device.ipAddress) {
+            const ip = document.createElement('div');
+            ip.className = 'device-info';
+            ip.style.fontFamily = 'monospace';
+            ip.style.fontSize = '0.8rem';
+            ip.textContent = `IP: ${device.ipAddress}`;
+            card.append(ip);
+          }
+          const lastSeen = document.createElement('div');
+          lastSeen.className = 'device-info';
+          lastSeen.textContent = device.online ? '● Online' : 'Last seen ' + formatTime(device.lastSeen);
+          if (device.online) {
+            lastSeen.style.color = '#2ecc71';
+            lastSeen.style.fontWeight = '600';
+          }
+          card.append(lastSeen);
+          return card;
+        }));
       }
 
       async function removeDevice(id, event) {
@@ -762,12 +815,20 @@
         const deleteDevice = document.getElementById('delete-device');
 
         const activeDevices = getActiveDevices();
-        const options = activeDevices.map(d =>
-          `<option value="${d.id}">${escapeHtml(d.displayName)}</option>`
-        ).join('');
-
-        filterDevice.innerHTML = '<option value="">All Devices</option>' + options;
-        deleteDevice.innerHTML = '<option value="">Select device...</option>' + options;
+        [ [filterDevice, 'All Devices'], [deleteDevice, 'Select device...'] ].forEach(([select, label]) => {
+          const selectedId = select.value;
+          const placeholder = document.createElement('option');
+          placeholder.value = '';
+          placeholder.textContent = label;
+          const options = activeDevices.map(device => {
+            const option = document.createElement('option');
+            option.value = device.id;
+            option.textContent = device.displayName || device.friendlyName || 'Device';
+            return option;
+          });
+          select.replaceChildren(placeholder, ...options);
+          select.value = activeDevices.some(device => device.id === selectedId) ? selectedId : '';
+        });
       }
 
       // Load history
@@ -784,10 +845,12 @@
           const search = document.getElementById('search-input').value;
           const deviceId = document.getElementById('filter-device').value;
           const type = document.getElementById('filter-type').value;
+          const pinned = document.getElementById('filter-pinned').value;
 
           if (search) params.append('q', search);
           if (deviceId) params.append('deviceId', deviceId);
           if (type) params.append('type', type);
+          if (pinned) params.append('pinned', pinned);
 
           const data = await fetchAPI(`${API.history}?${params}`);
           renderHistory(data);
@@ -801,12 +864,13 @@
         const items = data.content || [];
 
         if (!items.length) {
-          tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-icon">&#x1F4CB;</div>No clipboard history yet</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><div class="empty-state-icon">&#x1F4CB;</div>No clips match these filters</td></tr>';
           updatePagination(data);
           return;
         }
 
         tbody.innerHTML = items.map(item => {
+          const typeClass = ['text', 'image', 'files'].includes(item.payloadType) ? item.payloadType : '';
           let previewHtml = escapeHtml(item.payloadPreview || '');
           if (item.payloadType === 'image') {
             const imgSrc = `${API.history}/${item.id}/preview`;
@@ -822,10 +886,11 @@
               <td><input type="checkbox" class="item-checkbox" value="${item.id}" onchange="updateSelection()"></td>
               <td>${escapeHtml(item.deviceName || 'Unknown')}</td>
               <td>${formatTime(item.createdAt)}</td>
-              <td><span class="type-badge ${item.payloadType}">${item.payloadType}</span></td>
+              <td><span class="type-badge ${typeClass}">${escapeHtml(item.payloadType || '')}</span></td>
               <td class="payload-preview" onclick="viewItem(${item.id})">${previewHtml}</td>
               <td>${formatSize(item.payloadSize)}</td>
               <td class="actions">
+                <button class="btn-icon" onclick="togglePinned(${item.id}, ${!item.pinned})" aria-pressed="${!!item.pinned}" title="${item.pinned ? 'Unpin clip' : 'Pin clip'}">${item.pinned ? '&#x2605;' : '&#x2606;'}</button>
                 <button class="btn-icon" onclick="viewItem(${item.id})" title="View">&#x1F441;</button>
                 <button class="btn-icon" onclick="copyItem(${item.id})" title="Copy">&#x1F4CB;</button>
                 <button class="btn-icon" onclick="deleteItem(${item.id})" title="Delete">&#x1F5D1;</button>
@@ -848,7 +913,20 @@
           : 'No items';
 
         document.getElementById('btn-prev').disabled = currentPage === 0;
-        document.getElementById('btn-next').disabled = !data.hasNext;
+        document.getElementById('btn-next').disabled = currentPage + 1 >= (data.totalPages || 0);
+      }
+
+      async function togglePinned(id, pinned) {
+        try {
+          await fetchAPI(`${API.history}/${id}/pin`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pinned })
+          });
+          await loadHistory();
+        } catch (e) {
+          alert('Failed to update pin');
+        }
       }
 
       function prevPage() {
@@ -1101,7 +1179,7 @@
 
       // Delete
       async function deleteItem(id) {
-        if (!confirm('Delete this item?')) return;
+        if (!confirm('Delete this item, even if pinned?')) return;
 
         try {
           await fetchAPI(`${API.history}?ids=${id}`, {
@@ -1117,7 +1195,7 @@
 
       async function deleteSelected() {
         if (!selectedIds.size) return;
-        if (!confirm(`Delete ${selectedIds.size} items?`)) return;
+        if (!confirm(`Delete ${selectedIds.size} selected items, including any pinned clips?`)) return;
 
         try {
           const ids = Array.from(selectedIds).join(',');
@@ -1156,7 +1234,7 @@
         if (days) params.append('olderThanDays', days);
         if (deviceId) params.append('deviceId', deviceId);
 
-        if (!confirm('Are you sure you want to delete these items?')) return;
+        if (!confirm('Delete matching unpinned clips? Pinned clips will be kept.')) return;
 
         try {
           const result = await fetchAPI(`${API.history}?${params}`, {

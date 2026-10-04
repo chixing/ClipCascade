@@ -59,7 +59,7 @@ public class WebSocketEventListener {
 
             // Register device and mark as online
             Device registered = deviceService.registerDevice(deviceId, username, deviceType, osInfo, ipAddress, friendlyName);
-            String effectiveId = (registered != null && registered.getId() != null) ? registered.getId() : (deviceId != null && !deviceId.isEmpty() ? deviceId : sessionId);
+            String effectiveId = registered.getId();
             deviceService.markDeviceOnline(effectiveId, sessionId);
 
             logger.debug("WebSocket connected: user={}, sessionId={}, deviceId={}, type={}, os={}, ip={}",
@@ -80,23 +80,12 @@ public class WebSocketEventListener {
         }
 
         try {
-            UserPrincipal userPrincipal = (UserPrincipal) ((UsernamePasswordAuthenticationToken) principal)
-                    .getPrincipal();
-            String username = userPrincipal.getUsername();
-
-            String deviceId = getHeaderValue(headerAccessor, "deviceId");
-            String deviceType = getHeaderValue(headerAccessor, "deviceType");
-            String osInfo = getHeaderValue(headerAccessor, "osInfo");
-            String friendlyName = getHeaderValue(headerAccessor, "friendlyName");
-            String ipAddress = getHeaderValue(headerAccessor, "ipAddress");
-            String userAgent = getHeaderValue(headerAccessor, "userAgent");
-
-            deviceType = inferDeviceType(userAgent, deviceType);
-            osInfo = inferOsInfo(userAgent, osInfo);
-
-            Device registered = deviceService.registerDevice(deviceId, username, deviceType, osInfo, ipAddress, friendlyName);
-            String effectiveId = (registered != null && registered.getId() != null) ? registered.getId() : (deviceId != null && !deviceId.isEmpty() ? deviceId : sessionId);
-            deviceService.markDeviceOnline(effectiveId, sessionId);
+            // CONNECT and CONNECTED describe the same socket. Reuse the first
+            // registration, including its generated fallback when no IP is available.
+            String registeredId = deviceService.getDeviceIdForSession(sessionId);
+            if (registeredId != null) {
+                deviceService.refreshDeviceForSession(registeredId, sessionId);
+            }
         } catch (Exception e) {
             logger.debug("Failed to process WebSocket connected event: {}", e.getMessage());
         }

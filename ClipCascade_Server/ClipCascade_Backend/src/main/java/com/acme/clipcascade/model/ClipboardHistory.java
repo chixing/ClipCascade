@@ -39,6 +39,9 @@ public class ClipboardHistory {
     @Column(nullable = false)
     private Long createdAt;
 
+    @Column(nullable = false)
+    private boolean pinned;
+
     @Transient
     private String deviceName;
 
@@ -109,6 +112,14 @@ public class ClipboardHistory {
 
     public void setCreatedAt(Long createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public boolean isPinned() {
+        return this.pinned;
+    }
+
+    public void setPinned(boolean pinned) {
+        this.pinned = pinned;
     }
 
     public String getDeviceName() {
