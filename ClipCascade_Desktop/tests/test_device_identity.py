@@ -5,6 +5,8 @@ import logging
 import os
 import sys
 import tempfile
+import time
+from threading import Event, Lock
 import types
 import unittest
 from pathlib import Path
@@ -78,7 +80,8 @@ class DeviceIdentityTests(unittest.TestCase):
         manager = types.SimpleNamespace(
             config=config, is_connected=False, disconnected=False, first_conn_lost=True,
             clipboard_manager=Mock(), notification_manager=Mock(),
-            _on_close=lambda: None, send=lambda _: None, _receive=lambda _: None,
+            _on_close=lambda *_: None, send=lambda _: None, _receive=lambda _: None,
+            _connect_lock=Lock(),
         )
         success, _ = connect(manager)
         self.assertTrue(success)
@@ -90,10 +93,12 @@ class DeviceIdentityTests(unittest.TestCase):
         self.assertEqual(body["payload"], "synthetic clipboard")
 
     def test_custom_stomp_client_serializes_the_device_headers_on_the_wire(self):
-        namespace = {"logging": logging, "VERSIONS": "1.0,1.1", "Frame": Frame}
+        namespace = {"logging": logging, "time": time, "VERSIONS": "1.0,1.1", "Frame": Frame}
         connect = transport_method("stomp_ws/client.py", "connect", namespace)
         transmit = transport_method("stomp_ws/client.py", "_transmit", namespace)
-        client = types.SimpleNamespace(url="wss://example.invalid/clipsocket", _connect=Mock(), ws=Mock())
+        client = types.SimpleNamespace(url="wss://example.invalid/clipsocket", _connect=Mock(), ws=Mock(),
+                                       connected=True, _connected_event=Event())
+        client._connected_event.set()
         client._transmit = types.MethodType(transmit, client)
         expected = get_device_info(self.config)
 

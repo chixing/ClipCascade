@@ -1,5 +1,5 @@
 import time
-from threading import Thread
+from threading import Event, Thread
 
 from .frame import Frame
 import websocket
@@ -24,6 +24,8 @@ class Client:
         self.on_close_callback = on_close_callback
 
         self.opened = False
+        self._open_event = Event()
+        self._connected_event = Event()
 
         self.connected = False
 
@@ -43,25 +45,24 @@ class Client:
         thread.daemon = True
         thread.start()
 
-        total_ms = 0
-        while self.opened is False:
-            time.sleep(0.25)
-            total_ms += 250
-            if 0 < timeout < total_ms:
-                raise TimeoutError(f"Connection to {self.url} timed out")
+        if not self._open_event.wait(timeout / 1000 if timeout > 0 else None):
+            raise TimeoutError("WebSocket opening timed out")
+        if not self.opened:
+            raise ConnectionError("WebSocket closed before opening")
 
     def _on_open(self, ws_app, *args):
         self.opened = True
+        self._open_event.set()
 
     def _on_close(self, ws_app, *args):
-        self.connected = False
+        self._clean_up()
         logging.debug("Whoops! Lost connection to " + self.ws.url)
         if self.on_close_callback is not None:
             self.on_close_callback()
-        self._clean_up()
 
     def _on_error(self, ws_app, error, *args):
         logging.debug(error)
+        self._clean_up()
 
     def _on_message(self, ws_app, message, *args):
         if message == "\n":  # If message is a newline, it's a heartbeat frame
@@ -78,6 +79,7 @@ class Client:
             logging.debug("connected to server " + self.url)
             if self._connectCallback is not None:
                 _results.append(self._connectCallback(frame))
+            self._connected_event.set()
         elif frame.command == "MESSAGE":
 
             subscription = frame.headers["subscription"]
@@ -107,6 +109,7 @@ class Client:
         elif frame.command == "RECEIPT":
             pass
         elif frame.command == "ERROR":
+            self._clean_up()
             if self.errorCallback is not None:
                 _results.append(self.errorCallback(frame))
         else:
@@ -132,6 +135,7 @@ class Client:
     ):
 
         logging.debug("Opening web socket...")
+        deadline = time.monotonic() + timeout / 1000 if timeout > 0 else None
         self._connect(timeout)
 
         headers = headers if headers is not None else {}
@@ -148,6 +152,11 @@ class Client:
         self.errorCallback = errorCallback
 
         self._transmit("CONNECT", headers)
+        remaining = max(0, deadline - time.monotonic()) if deadline is not None else None
+        if not self._connected_event.wait(remaining):
+            raise TimeoutError("STOMP handshake timed out")
+        if not self.connected:
+            raise ConnectionError("STOMP connection was rejected or closed")
 
     def disconnect(self, disconnectCallback=None, headers=None):
         if headers is None:
@@ -162,7 +171,10 @@ class Client:
             disconnectCallback()
 
     def _clean_up(self):
+        self.opened = False
         self.connected = False
+        self._open_event.set()
+        self._connected_event.set()
 
     def send(self, destination, headers=None, body=None):
         if headers is None:
