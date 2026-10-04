@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'; // persistent storage
-import { DEVICE_ID_KEY } from './DeviceIdentity';
 
 // Save data in async storage
 export const setDataInAsyncStorage = async (key, value) => {
@@ -38,11 +37,10 @@ export const getMultipleDataFromAsyncStorage = async keys => {
   }
 };
 
-// Clear account/settings data while retaining this installation's identity.
+// Clear all data from async storage
 export const clearAsyncStorage = async () => {
   try {
-    const keys = await AsyncStorage.getAllKeys();
-    await AsyncStorage.multiRemove(keys.filter(key => key !== DEVICE_ID_KEY));
+    await AsyncStorage.clear();
   } catch (e) {
     throw e;
   }
