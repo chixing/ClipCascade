@@ -626,7 +626,10 @@ function connectP2P() {
   // first fetch STUN url (async), then connect
   fetchStunUrl().then(() => {
     // WebSocket for signaling
-    p2pSignalingWebSocket = new WebSocket(signalingUrl);
+    const deviceInfo = getWebDeviceInfo();
+    const deviceUrl = new URL(signalingUrl, window.location.href);
+    deviceUrl.searchParams.set("deviceId", deviceInfo.deviceId);
+    p2pSignalingWebSocket = new WebSocket(deviceUrl.toString());
 
     p2pSignalingWebSocket.onopen = () => {
       setP2PConnected(true);

@@ -24,6 +24,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import com.acme.clipcascade.constants.ServerConstants;
+import com.acme.clipcascade.model.Device;
 import com.acme.clipcascade.service.DeviceService;
 import com.acme.clipcascade.utils.MapUtility;
 import com.acme.clipcascade.utils.TimeUtility;
@@ -122,10 +123,12 @@ public class P2PWebSocketHandler extends AbstractWebSocketHandler {
 
             String ipAddress = null;
             String userAgent = null;
+            String clientDeviceId = null;
             Map<String, Object> attributes = session.getAttributes();
             if (attributes != null) {
                 ipAddress = (String) attributes.get("ipAddress");
                 userAgent = (String) attributes.get("userAgent");
+                clientDeviceId = (String) attributes.get("deviceId");
             }
             if (ipAddress == null && session.getRemoteAddress() != null && session.getRemoteAddress().getAddress() != null) {
                 ipAddress = session.getRemoteAddress().getAddress().getHostAddress();
@@ -135,8 +138,9 @@ public class P2PWebSocketHandler extends AbstractWebSocketHandler {
 
             // Register device and mark as online
             try {
-                deviceService.registerDevice(peerId, username, deviceType, osInfo, ipAddress, null);
-                deviceService.markDeviceOnline(peerId, session.getId());
+                // peerId is deliberately transient and belongs to signaling only.
+                Device device = deviceService.registerDevice(clientDeviceId, username, deviceType, osInfo, ipAddress, null);
+                deviceService.markDeviceOnline(device.getId(), session.getId());
             } catch (Exception e) {
                 logger.debug("Failed to register device: {}", e.getMessage());
             }

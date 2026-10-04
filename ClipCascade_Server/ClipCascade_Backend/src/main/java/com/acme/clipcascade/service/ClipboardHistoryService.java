@@ -47,6 +47,20 @@ public class ClipboardHistoryService {
             int page,
             int size) {
 
+        return searchHistory(username, deviceId, payloadType, fromTime, toTime, search, null, page, size);
+    }
+
+    public Page<ClipboardHistory> searchHistory(
+            String username,
+            String deviceId,
+            String payloadType,
+            Long fromTime,
+            Long toTime,
+            String search,
+            Boolean pinned,
+            int page,
+            int size) {
+
         Pageable pageable = PageRequest.of(page, size);
 
         Page<ClipboardHistory> results = clipboardHistoryRepo.searchHistory(
@@ -56,6 +70,7 @@ public class ClipboardHistoryService {
                 fromTime,
                 toTime,
                 search,
+                pinned,
                 pageable);
 
         // Enrich with device names
@@ -83,6 +98,11 @@ public class ClipboardHistoryService {
     @Transactional
     public int deleteByIds(List<Long> ids, String username) {
         return clipboardHistoryRepo.deleteByIdsAndUsername(ids, username);
+    }
+
+    @Transactional
+    public boolean setPinned(Long id, String username, boolean pinned) {
+        return clipboardHistoryRepo.setPinnedByIdAndUsername(id, username, pinned) == 1;
     }
 
     @Transactional

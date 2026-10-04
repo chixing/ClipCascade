@@ -271,16 +271,17 @@ public class ClipCascadeController {
                 String sessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
                 if (sessionId != null) {
                     String mappedDeviceId = deviceService.getDeviceIdForSession(sessionId);
-                    deviceId = (mappedDeviceId != null && !mappedDeviceId.isEmpty()) ? mappedDeviceId : sessionId;
+                    deviceId = mappedDeviceId;
                 }
             }
 
             String sessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
-            if (deviceId != null && !deviceId.isEmpty()) {
-                deviceService.registerDevice(deviceId, userPrincipal.getUsername(), deviceType, osInfo, ipAddress, friendlyName);
-                if (sessionId != null) {
-                    deviceService.markDeviceOnline(deviceId, sessionId);
-                }
+            Device registered = deviceService.registerDevice(deviceId, userPrincipal.getUsername(), deviceType, osInfo, ipAddress, friendlyName);
+            // Registration can resolve a legacy fallback or owner-scoped ID. Use
+            // that same ID for both presence and history, never the claimed raw ID.
+            deviceId = registered.getId();
+            if (sessionId != null) {
+                deviceService.refreshDeviceForSession(deviceId, sessionId);
             }
 
             clipboardHistoryService.recordClipboard(
@@ -759,6 +760,7 @@ public class ClipCascadeController {
             @RequestParam(required = false) Long from,
             @RequestParam(required = false) Long to,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) Boolean pinned,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
 
@@ -781,6 +783,7 @@ public class ClipCascadeController {
                                 from,
                                 to,
                                 normalizedSearch,
+                                pinned,
                                 page,
                                 size)),
                 "Forbidden");
@@ -796,6 +799,24 @@ public class ClipCascadeController {
                 () -> ResponseEntityUtil.executeWithResponse(
                         () -> clipboardHistoryService.getHistoryItem(id, userPrincipal.getUsername())),
                 "Forbidden");
+    }
+
+    @PutMapping("/admin/clipboard-history/{id}/pin")
+    public ResponseEntity<?> pinClipboardHistoryItem(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable Long id,
+            @RequestBody Map<String, Boolean> request) {
+        if (!userPrincipal.isAdmin()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        Boolean pinned = request.get("pinned");
+        if (pinned == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (!clipboardHistoryService.setPinned(id, userPrincipal.getUsername(), pinned)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(Map.of("pinned", pinned));
     }
 
     @GetMapping("/admin/clipboard-history/{id}/download")
@@ -821,6 +842,7 @@ public class ClipCascadeController {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType(decoded.contentType));
         headers.setContentDispositionFormData("attachment", decoded.filename);
+        headers.setCacheControl("private, no-store");
         return new ResponseEntity<>(decoded.data, headers, HttpStatus.OK);
     }
 
@@ -847,7 +869,7 @@ public class ClipCascadeController {
         if (pngBytes != null) {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.IMAGE_PNG);
-            headers.setCacheControl("max-age=86400, public");
+            headers.setCacheControl("private, no-store");
             return new ResponseEntity<>(pngBytes, headers, HttpStatus.OK);
         }
 
