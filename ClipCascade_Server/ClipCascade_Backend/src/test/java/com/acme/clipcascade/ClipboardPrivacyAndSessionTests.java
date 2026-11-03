@@ -23,6 +23,11 @@ import com.acme.clipcascade.constants.RoleConstants;
 import com.acme.clipcascade.model.ClipboardData;
 import com.acme.clipcascade.service.ClipboardHistoryService;
 import com.acme.clipcascade.service.UserService;
+import com.acme.clipcascade.service.SessionService;
+import com.acme.clipcascade.service.LiveWebSocketService;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.WebSocketHandler;
+import static org.mockito.Mockito.*;
 
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties =
@@ -39,6 +44,9 @@ class ClipboardPrivacyAndSessionTests {
 
     @Autowired
     private ClipboardHistoryService history;
+
+    @Autowired private SessionService sessionService;
+    @Autowired private LiveWebSocketService liveWebSockets;
 
     @Test
     void anonymousMonitoringDoesNotCreateCookiesOrStoredSessions() throws Exception {
@@ -62,6 +70,10 @@ class ClipboardPrivacyAndSessionTests {
         var sessionCookie = login.cookies().getCookieStore().getCookies().stream()
                 .filter(cookie -> "JSESSIONID".equals(cookie.getName())).findFirst().orElseThrow();
         assertThat(sessionCookie.isHttpOnly()).isTrue();
+        String rawId = new String(Base64.getDecoder().decode(sessionCookie.getValue()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(database.queryForObject("SELECT COUNT(*) FROM SPRING_SESSION WHERE SESSION_ID = ?",
+                Long.class, rawId)).isEqualTo(1L);
         assertThat(database.queryForObject("""
                 SELECT COUNT(*) FROM SPRING_SESSION_ATTRIBUTES attributes
                 JOIN SPRING_SESSION sessions ON sessions.PRIMARY_ID = attributes.SESSION_PRIMARY_ID
@@ -78,6 +90,24 @@ class ClipboardPrivacyAndSessionTests {
 
         assertThat(get(login.client(), "/health").statusCode()).isEqualTo(200);
         assertThat(get(login.client(), "/whoami").body()).contains(login.username());
+    }
+
+    @Test
+    void revokingPersistentSessionsAlsoClosesLiveSockets() throws Exception {
+        TestHttpClient login = TestHttpClient.login(users, port, RoleConstants.USER);
+        WebSocketSession socket = mock(WebSocketSession.class);
+        when(socket.getId()).thenReturn("revocation-" + login.username());
+        when(socket.getPrincipal()).thenReturn(() -> login.username());
+        when(socket.isOpen()).thenReturn(true);
+        liveWebSockets.decorate(mock(WebSocketHandler.class)).afterConnectionEstablished(socket);
+        assertThat(login.get("/whoami").statusCode()).isEqualTo(200);
+
+        sessionService.logoutAllSessions(login.username());
+
+        verify(socket).close(org.mockito.ArgumentMatchers.argThat(status -> status.getCode() == 1008));
+        assertThat(login.get("/whoami").statusCode()).isEqualTo(302);
+        assertThat(database.queryForObject("SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = ?",
+                Long.class, login.username())).isZero();
     }
 
     @Test

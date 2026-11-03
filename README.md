@@ -87,6 +87,7 @@
 - **👥 Multi-User Support** – Isolates clipboard data per user while enabling seamless syncing between personal devices.  
 - **🌐 Web-Based Dashboard** – Track clipboard activity and manage settings through an intuitive interface.  
 - **⚙️ Customizable Preferences** – Fine-tune sync settings for performance, security, and usability.  
+- **↔️ Per-Device Sync Direction** – Choose whether each device sends, receives, or syncs clipboard content both ways.
 - **🔔 Smart Update Notifications** – Stay informed about new features, security patches, and enhancements.  
 
    
@@ -147,7 +148,7 @@ To deploy the ClipCascade server on any operating system that supports Java 21 o
     | Variable                     | Description                                                                                          | Default Value     | Example                           |
     |------------------------------|------------------------------------------------------------------------------------------------------|-------------------|-----------------------------------|
     | `CC_MAX_MESSAGE_SIZE_IN_MiB` | Defines the maximum allowed message size in MiB. Ignored if `CC_P2P_ENABLED` is set to `true`.       | `1`               | `3`                               |
-    | `CC_ALLOWED_ORIGINS`         | Specifies the allowed CORS origins for secure cross-origin access.                                   | `*`               | `https://clipcascade.example.com` |
+    | `CC_ALLOWED_ORIGINS`         | Specifies the allowed WebSocket origin (not general HTTP CORS).                                     | `*`               | `https://clipcascade.example.com` |
     | `CC_P2P_ENABLED`             | Enables or disables peer-to-peer mode. When enabled, `CC_MAX_MESSAGE_SIZE_IN_MiB` is ignored.        | `false`           | `true`                            |
     | `CC_SIGNUP_ENABLED`          | Allows or restricts user self-registration.                                                          | `false`           | `false`                           |
     | `CC_PORT`                    | Specifies the port on which the server listens for incoming connections.                             | `8080`            | `1234`                            |
@@ -208,10 +209,12 @@ To host ClipCascade on your server using Docker, follow these steps:
         environment:
           - CC_MAX_MESSAGE_SIZE_IN_MiB=1   # Maximum message size in MiB (ignored if P2P mode is enabled)
           - CC_P2P_ENABLED=false  # Enables or disables peer-to-peer(P2P) mode
-          # - CC_ALLOWED_ORIGINS=https://clipcascade.example.com  # Defines allowed CORS origins for security
+          # - CC_ALLOWED_ORIGINS=https://clipcascade.example.com  # Restricts the WebSocket origin
           # - CC_SIGNUP_ENABLED=false  # Enables or disables user self-registration
    ```
     
+   For HTTPS with Nginx, Traefik, Caddy, or Nginx Proxy Manager, use the [reverse-proxy setups](ClipCascade_Server/reverse-proxy/README.md).
+
    For additional `.yml` configuration files, visit [ClipCascade Server Docker Configuration](https://github.com/Sathvik-Rao/ClipCascade/tree/main/ClipCascade_Server/docker-compose).
   
 2. Deploy the Docker Container
@@ -261,7 +264,7 @@ To install the ClipCascade Windows desktop application, follow these steps:
     - Open ClipCascade after installation and **log in** to start syncing your clipboard across devices.
     - When prompted, enter your **server's IP address, port number, or domain name**.
     - If encryption is enabled, ensure it is **enabled on all devices**.
-    - In the **Extra Config** section, you can set a local clipboard size limit. By default, no limit is enforced (note: large file transfers may cause temporary unresponsiveness).
+    - In the **advanced settings** section, you can set a local clipboard size limit. By default, no limit is enforced (note: large file transfers may cause temporary unresponsiveness).
 4. **Network Access Prompt (P2P Mode)**
     - If the server is running in **P2P mode**, you will see a Windows security prompt asking, **"Do you want to allow public and private networks to access this app?"**
 
@@ -274,6 +277,7 @@ To install the ClipCascade Windows desktop application, follow these steps:
 
 To build your own desktop executable from source (`ClipCascade_Desktop/src`):
 ```bash
+pip3 install pyinstaller
 pip3 install -r requirements_win.txt
 python3 -m PyInstaller ClipCascade_win.spec
 ```
@@ -290,8 +294,8 @@ To install the ClipCascade macOS desktop application, follow these steps:
 
 1. **Download the Application**
     - Visit the [Releases page](https://github.com/Sathvik-Rao/ClipCascade/releases) and download the appropriate version:
-      - **For M-series chips** (Apple Silicon), download `ClipCascade-Apple_macOS(ARM_M-Series).zip`.
-      - **For Intel chips**, download `ClipCascade-Apple_macOS(Intel-Series).zip`.
+      - **For M-series chips** (Apple Silicon), download `ClipCascade-Apple_macOS.ARM_M-Series.zip`.
+      - **For Intel chips**, download `ClipCascade-Apple_macOS.Intel-Series.zip`.
     - You can check your chip type by navigating to **Apple Menu** → **About This Mac**.
    
 2. **Extract the Archive**
@@ -323,7 +327,7 @@ To install the ClipCascade macOS desktop application, follow these steps:
 6. **Configure the application**
     - When prompted, enter your **server's IP address, port number, or domain name**.
     - If encryption is enabled, ensure it is **enabled on all devices**.
-    - In the **Extra Config** section, you can set a local clipboard size limit. By default, no limit is enforced (note: large file transfers may cause temporary unresponsiveness).
+    - In the **advanced settings** section, you can set a local clipboard size limit. By default, no limit is enforced (note: large file transfers may cause temporary unresponsiveness).
 
 7. **Network Access Prompt (P2P Mode)**
     - If the server is running in **P2P mode**, you will see a macOS security prompt asking, **"Allow "ClipCascade" to find devices on local networks?"**
@@ -347,8 +351,9 @@ To install the ClipCascade macOS desktop application, follow these steps:
 
 To build your own desktop executable from source (`ClipCascade_Desktop/src`):
 ```bash
-pip3 install -r requirements_mac.txt
-python3 -m PyInstaller ClipCascade_macos.spec
+pip3 install certifi pyinstaller
+pip3 install --no-cache-dir -r requirements_mac.txt
+python3 -m PyInstaller ClipCascade_macos.spec --clean
 ```
 
 [➡️ Explore Advanced Details](https://github.com/Sathvik-Rao/ClipCascade?tab=readme-ov-file#%EF%B8%8F-advanced-details)
@@ -365,11 +370,13 @@ To install the ClipCascade mobile application on your Android device, follow the
 4. **Open** ClipCascade and log in to begin syncing your clipboard across devices.
     - When prompted, enter your **server's IP address, port number, or domain name**.
     - If encryption is enabled, ensure it is **enabled on all devices**.
-    - In the **Extra Config** section, you can set a local clipboard size limit. By default, no limit is enforced (note: large file transfers may cause temporary unresponsiveness).
+    - In the **advanced settings** section, you can set a local clipboard size limit. By default, no limit is enforced (note: large file transfers may cause temporary unresponsiveness).
 
 #### Android Automatic Clipboard Monitoring Setup:
 
 ClipCascade supports automatic clipboard monitoring for both rooted and non-rooted devices. To activate this feature, execute the following ADB commands.
+
+> These permissions can also be granted using [Shizuku](https://shizuku.rikka.app/guide/setup/) through **Grant permissions using Shizuku** in the app's Android setup guide.
 
 ##### Install ADB
 
@@ -469,17 +476,17 @@ If you encounter the `error: externally-managed-environment`, install the requir
 
 ##### Debian/Ubuntu:
 ```
-sudo apt install -y python3-xxhash python3-pyperclip python3-requests python3-websocket python3-pycryptodome python3-tk python3-pystray python3-pyfiglet python3-bs4 python3-plyer python3-aiortc
+sudo apt install -y python3-xxhash python3-pyperclip python3-requests python3-websocket python3-pycryptodome python3-tk python3-pystray python3-pyfiglet python3-bs4 python3-plyer python3-aiortc python3-prompt-toolkit
 ```
 
 ##### Fedora:
 ```
-sudo dnf install -y python3-xxhash python3-pyperclip python3-requests python3-websocket-client python3-pycryptodomex python3-tkinter python3-pystray python3-pyfiglet python3-beautifulsoup4 python3-plyer python3-aiortc
+sudo dnf install -y python3-xxhash python3-pyperclip python3-requests python3-websocket-client python3-pycryptodomex python3-tkinter python3-pystray python3-pyfiglet python3-beautifulsoup4 python3-plyer python3-aiortc python3-prompt-toolkit
 ```
 
 ##### Arch:
 ```
-sudo pacman -S --noconfirm python-xxhash python-pyperclip python-requests python-websocket-client python-pycryptodome tk python-pystray python-pyfiglet python-beautifulsoup4 python-plyer python-aiortc
+sudo pacman -S --noconfirm python-xxhash python-pyperclip python-requests python-websocket-client python-pycryptodome tk python-pystray python-pyfiglet python-beautifulsoup4 python-plyer python-aiortc python-prompt_toolkit
 ```
   - If you encounter the `error: target not found: python-plyer`, install via `yay -S --noconfirm python-plyer`
   - If you encounter the `error: target not found: python-aiortc`, install via `yay -S --noconfirm python-aiortc`
@@ -508,7 +515,7 @@ sudo pacman -S --noconfirm ffmpeg
 Start ClipCascade by running (use sudo if needed):
    - When prompted, enter your **server's IP address, port number, or domain name**.
    - If encryption is enabled, ensure it is **enabled on all devices**.
-   - In the **Extra Config** section, you can set a local clipboard size limit. By default, no limit is enforced (note: large file transfers may cause temporary unresponsiveness).
+   - In the **advanced settings** section, you can set a local clipboard size limit. By default, no limit is enforced (note: large file transfers may cause temporary unresponsiveness).
 ```
 python3 main.py
 ```
@@ -619,6 +626,7 @@ cd /path/to/clipcascade/src/ && sudo nohup python3 main.py &> /dev/null &
 ```
 
 ##### CLI
+
 ```
 cd /path/to/clipcascade/src/ && python3 main.py
 ```
@@ -652,6 +660,12 @@ cd /path/to/clipcascade/src/ && sudo python3 main.py
 
   <img src="https://github.com/user-attachments/assets/8184e4ad-d711-4fda-9382-eb3a252bc07b" alt="server_update" />
   
+#### Web Dashboard and Administration
+
+- Web pages follow your system's light/dark theme until you use the theme toggle. Your manual choice is saved in browser local storage and restored across page loads when storage is available.
+- Use your browser's install or **Add to Home Screen** option, where supported, to open the web dashboard as an app.
+- The Admin Panel user list and the Advanced page's User Details, Online Users, and BFA tracker tables support searching, sorting, and pagination. Advanced tables also have resizable columns. Online Users shows active WebSocket connections in both P2S and P2P modes.
+- Administrators can revoke sessions for an individual user or use **Revoke All Sessions**. Editing or deleting an account, or changing its password, also revokes its sessions and disconnects its active WebSocket connections on this server without a restart. Deleted or renamed usernames remain reserved until the server restarts.
 
 #### Environment Variables:
 
@@ -676,7 +690,7 @@ Defines the maximum message size (in MiB) that the server can handle.
 - Desktop supports larger clipboard sizes across text, images, and files.
 <br><br>
 <strong>Additional Notes:</strong><br>
-- Clients can set their own limits via the "Extra Config" on the login page.<br>
+- Clients can set their own limits via **Show advanced settings** on the login page.<br>
 - If <code>CC_P2P_ENABLED</code> is <code>true</code>, this setting is ignored.
 </td>
 <td>1</td>
@@ -727,11 +741,11 @@ You can use a public STUN server or host your own.
 <tr>
 <td>CC_ALLOWED_ORIGINS</td>
 <td>
-Specifies which domain is permitted to access the WebSocket server (CORS policy).
+Specifies the exact origin permitted to access the WebSocket server. This is a WebSocket origin check, not general HTTP CORS configuration.
 <br><br>
 <strong>Security Note:</strong><br>
 - Leaving this unset allows all origins (not recommended for security-sensitive deployments).<br>
-- To restrict access, specify your domain (e.g., <code>https://clipcascade.example.com</code>).
+- To restrict access, specify the public origin (e.g., <code>https://clipcascade.example.com</code>); include a nonstandard port, such as <code>:8743</code>.
 </td>
 <td>*</td>
 </tr>
@@ -788,6 +802,8 @@ Defines the internal port where the ClipCascade server listens for connections.
 Specifies the duration before user sessions expire, using minute-based formatting (<code>[number]m</code>).
 <br><br>
 <strong>Default:</strong> <code>525960m</code> (~1 year).
+<br><br>
+Sessions are lost on server restart unless <code>CC_SESSION_PERSISTENCE_ENABLED</code> is enabled.
 </td>
 <td>525960m</td>
 </tr>
@@ -891,8 +907,8 @@ Specifies the username for the database connection.
 Defines the password used for encrypting the user database.
 <br><br>
 <strong>Note:</strong><br>
-- (H2) Replace <code>&lt;file password&gt; &lt;user password&gt;</code> with secure values.<br>
-- Once set, you must use the same password whenever you migrate the database.
+- (H2) Change the default password to secure values in the format <code>&lt;file password&gt; &lt;user password&gt;</code> before the first server start, especially when <code>CC_SESSION_PERSISTENCE_ENABLED</code> is enabled, since login sessions are stored in the database.<br>
+- Keep the same value across restarts, upgrades, and migrations when reusing the database. Changing this variable alone does not update the existing database's password.
 </td>
 <td>QjuGlhE3uwylBBANMkX1 o2MdEoFgbU5XkFvTftky</td>
 </tr>
@@ -1051,6 +1067,35 @@ Defines the STOMP broker password for external message handling.
   <td>-1</td>
 </tr>
 
+<!-- 35 -->
+<tr>
+  <td>CC_SESSION_PERSISTENCE_ENABLED</td>
+  <td>
+    Keeps login sessions across server restarts in the existing H2 or PostgreSQL database. Requires persistent database storage (the <code>/database</code> volume for Docker's default H2 setup).
+    <br><br>
+    Sessions still follow <code>CC_SESSION_TIMEOUT</code>. Starting the server with persistence disabled deletes previously saved sessions.
+  </td>
+  <td>false</td>
+</tr>
+
+<!-- 36 -->
+<tr>
+  <td>CC_P2P_SIGNALING_RATE_LIMIT_PER_SEC</td>
+  <td>
+    Limits P2P signaling messages per WebSocket session per second. Short bursts up to the limit are allowed; excess messages are dropped. Applies only in P2P mode. Values of <code>0</code> or less disable the limiter.
+  </td>
+  <td>-1</td>
+</tr>
+
+<!-- 37 -->
+<tr>
+  <td>CC_CAPTCHA_DIFFICULTY_PERCENT</td>
+  <td>
+    Sets CAPTCHA difficulty from <code>0</code> (easiest) to <code>100</code> (hardest). Values are clamped to this range.
+  </td>
+  <td>100</td>
+</tr>
+
 </tbody>
 </table>
 
@@ -1059,8 +1104,8 @@ Defines the STOMP broker password for external message handling.
 ### 🖥️📱 Client Apps
 - Logs (`clipcascade_log.log`) are stored in the installation directory on Windows and Linux, and in `<current user>/Library/Application Support/ClipCascade/` on macOS. These logs allow you to review application activity and are automatically reset each time the application is reopened, preventing indefinite growth.
 - The `DATA` file stores settings and user details, enabling the app to retain this information across both restarts and updates.
-- On Linux and macOS, a `ClipCascade.lock` file is created while the program is running. This file ensures that only a single instance of ClipCascade can be opened at a time.
-- All apps include a built-in update check feature, conveniently displayed on the homepage or taskbar. This ensures you can quickly check for updates within the app, keeping you up to date with the latest enhancements and security fixes.
+- On Linux and macOS, ClipCascade holds an operating-system lock on `ClipCascade.lock` to allow only one instance at a time. The file remains after exit; the lock is released when the process exits, including after a crash.
+- Desktop and Android check for updates at startup and once a day while running, retrying failed checks after an hour. Update status remains visible in the tray/menu or Android home screen. Alerts appear once per new version each app session; Android uses a popup while the app is active or a notification in the background.
 
    <table>
     <tr>
@@ -1073,27 +1118,51 @@ Defines the STOMP broker password for external message handling.
     </tr>
    </table>
   
-#### Extra Config/Advanced Settings (Desktop/Mobile):
-- **Maximum Clipboard Size Local Limit (in bytes)**: If the app crashes or stops unexpectedly, it may be due to receiving clipboard content exceeding the platform's maximum size limit. You can set a local size limit by specifying a value in bytes (e.g., 512 KiB = 524288 bytes) to test different thresholds suitable for your device. This local limit works alongside the server-specified limit to ensure smoother operation without crashes. For example, on Android (particularly on the Pixel 6a as of 2024), the platform limit(for text) is typically less than 1 MiB. Since the server limit cannot go below 1 MiB, setting the local limit to around 900,000 bytes on the Pixel 6a can help prevent crashes.
-- **Store Password Locally (not recommended)**: Enable this option if you frequently encounter session logouts. While the app stores session cookies for an extended period, a server restart may prompt a re-login. If re-entering the password becomes tedious, you can use this option to store your password locally for convenience.
+<a name="extra-configadvanced-settings-desktopmobile"></a>
+
+#### Login and advanced settings (Desktop/Mobile):
+
+Use **Log in** to connect. Select **Show advanced settings** to expand additional options and **Hide advanced settings** to collapse them. On desktop, hover over settings for explanations. On Android, tap a label with a small **?** to see its explanation, or use **HELP** to open this documentation.
+
+Connection status notifications appear on the main login screen, outside advanced settings, on both desktop and Android. Desktop enables them by default; Android disables them by default. Encryption is also on the main login screen and is enabled by default on both platforms.
+
+Device preferences save as you change them, without requiring a successful login: notification settings, local clipboard size limit, send/receive clipboard, image/file sharing, password-storage preference, the default download folder on desktop and Android, and Android startup/periodic checks. Server address, credentials, encryption settings, and custom CA configuration are saved after successful login.
+
+- **Local clipboard size limit**: If the app crashes or stops unexpectedly, it may be due to receiving clipboard content exceeding the platform's maximum size limit. Set a local limit to test a suitable threshold for your device; it applies to incoming and outgoing clipboard content alongside server and platform limits. On the desktop login window and Android, choose **Bytes**, **KiB**, **MiB**, or **GiB**. Decimal values such as `1.5 MiB` are supported and rounded to the nearest byte; 1 KiB = 1024 bytes. Leave the value blank or select **No local limit** to remove the local limit. The Linux CLI accepts an integer byte count, or a blank value for no local limit. The server's `CC_MAX_MESSAGE_SIZE_IN_BYTES` setting can also set a limit below 1 MiB.
+- **Store Password Locally (not recommended)**: Enable this option if you frequently encounter session logouts. While the app stores session cookies for an extended period, a server restart may prompt a re-login unless the server enables session persistence. If re-entering the password becomes tedious, you can use this option to store your password locally for convenience. Disabling this option immediately clears the saved password.
    > Note: This option will only work if encryption is disabled, as encryption requires the raw password to generate a password hash.
-- **Enable Image Sharing and Enable File Sharing**: Enabling these options allows the app to send images or files. However, the app will continue to receive images and files even if these options are disabled.
-- **Enable Notification**: Turn on this option to receive notifications about WebSocket disconnections and reconnections.
-- **Enable Encryption (recommended)**: Enabling this option activates end-to-end encryption for clipboard data. This ensures that all clipboard content is encrypted before leaving your device. Refer to the section below on E2E encryption for detailed instructions on how it works and how to configure the `salt` and `hash rounds`.
+- **Send Clipboard**: Share clipboard changes from this device. Enabled by default. Disable it to stop sending while still receiving updates if **Receive Clipboard** is enabled.
+- **Receive Clipboard**: Apply clipboard updates from other devices. Enabled by default. Disable it to stop receiving while still sharing local changes if **Send Clipboard** is enabled. Both options are available on desktop and Android; enable both for two-way sync or disable both to pause clipboard syncing on this device.
+- **Enable Image Sharing and Enable File Sharing**: Enabling these options allows the app to send images or files when **Send Clipboard** is enabled. These options do not block incoming images or files; incoming content is controlled by **Receive Clipboard**.
+- **Enable encryption (recommended)**: Enabling this option activates end-to-end encryption for clipboard data. This ensures that all clipboard content is encrypted before leaving your device. Refer to the section below on E2E encryption for detailed instructions on how it works and how to configure the encryption salt and key derivation iterations.
 
-  #### Desktop (Specific):
-  - **Default File Download Location**: When this path is set, the app will save files directly to the specified location without prompting the user each time the "Download Files" button is clicked.
-  - **SSL CA bundle**: Path to a PEM file containing your root CA (or full chain) used for HTTPS/WSS verification. Leave it empty to use default public CA/OS trust. Use this field when your ClipCascade server certificate is signed by a private/internal CA (for example, corporate PKI).
-  
-  #### Android (Specific):
-  - **Run on System Startup**: Enable this option to allow the app to automatically start on system reboot. By default, this option is disabled. If you are using the [ADB](https://github.com/Sathvik-Rao/ClipCascade?tab=readme-ov-file#adb-commands) workaround, keep this option disabled to avoid issues with the READ_LOGS permission [popup](https://github.com/Sathvik-Rao/ClipCascade?tab=readme-ov-file#adb-commands) being dismissed, which prevents clipboard monitoring in the background.
-  - **Enable WebSocket Status Notification**: Receive alerts when the WebSocket connection is lost or restored, ensuring you're informed about any connection disruptions.
-    
-    <img src="https://github.com/user-attachments/assets/6a8b903c-ee52-444c-a14e-bed70e31dcee" alt="periodic_check_notification" width="250" />
+- **Custom CA certificate bundle**: Use a PEM/CRT certificate bundle when your server uses a private/internal CA (for example, corporate PKI). Leave it empty to use default public CA/OS trust. The bundle affects HTTPS/WSS verification only; HTTP/WS connections are still allowed, and TLS certificate and hostname verification remain enabled.
 
-  - **Enable Periodic Checks**: Enabling this option performs periodic checks to ensure clipboard monitoring and the foreground service are running. It verifies the service status when monitoring starts and then checks every 15 minutes in the background. If the service is not running, a notification is displayed. Clicking the notification will restart the service.
-    
-    <img src="https://github.com/user-attachments/assets/7341b960-5e60-4af6-b627-2183088de262" alt="periodic_check_notification" width="250" />
+  **Desktop:** Enter the path to a PEM file containing your root CA or certificate chain, or use **Browse…** to select it. The picker offers PEM/CRT filters and an **All files** option; the bundle must contain PEM-encoded certificates. Cancelling keeps the current path unchanged. Use the **trash button** to remove the path and log in to use default certificate verification.
+
+  **Android:** Tap **Import** to select a certificate bundle (up to 1 MiB). The app saves a copy after successful login and restores it for background connections. Imported certificates are trusted alongside system CAs only for the configured server hostname; other hostnames use system trust. Tap **Replace** to import another bundle, or **Remove** and log in to return to system trust only.
+
+- **Notify when an update is available**: Enabled by default on desktop and Android. Disable it to stop update alerts; update checks and the visible update status remain available.
+- **Notify when downloads finish**: Enabled by default on desktop and Android, under advanced notification settings. Disable it to hide successful-download notifications. Saving progress, visible download results, and failure feedback remain available. Desktop does not show a separate download-start notification. Changes save immediately.
+- **Show connection status notifications**: Receive alerts when the WebSocket connection is lost or restored. Available on desktop and Android; enabled by default on desktop and disabled by default on Android. This setting is on the main login screen, outside advanced settings.
+
+  <img src="https://github.com/user-attachments/assets/6a8b903c-ee52-444c-a14e-bed70e31dcee" alt="connection_status_notification" width="250" />
+
+- **Default download folder**: Select a folder to save downloads without prompting each time. Changes save immediately and persist across restarts. Cancelling the picker keeps the current setting. Clear the default to choose a destination for each download instead; this does not delete downloaded files.
+
+  **Android:** If the saved folder is no longer writable or accessible, the app asks you to select a replacement and saves it as the new default.
+
+#### Desktop (Specific):
+
+- **Notify when clipboard content is received**: Disabled by default. Enable it in advanced settings to show notifications for content received from another device, including a text preview, image dimensions, or file names with a file icon. Previews may be visible on your lock screen. This setting is independent of connection status and update notifications.
+
+#### Android (Specific):
+
+- **Start on device restart (disable if the READ_LOGS permission is granted via ADB)**: Enable this option to allow the app to automatically start on system reboot. By default, this option is disabled. If you are using the [ADB](https://github.com/Sathvik-Rao/ClipCascade?tab=readme-ov-file#adb-commands) workaround, keep this option disabled to avoid issues with the READ_LOGS permission [popup](https://github.com/Sathvik-Rao/ClipCascade?tab=readme-ov-file#adb-commands) being dismissed, which prevents clipboard monitoring in the background.
+
+- **Enable Periodic Checks**: Enabling this option performs periodic checks to ensure clipboard monitoring and the foreground service are running. It verifies the service status when monitoring starts and then checks every 15 minutes in the background. If the service is not running, a notification is displayed. Clicking the notification will restart the service.
+
+  <img src="https://github.com/user-attachments/assets/7341b960-5e60-4af6-b627-2183088de262" alt="periodic_check_notification" width="250" />
 
 * * * * * * *
 
@@ -1103,13 +1172,13 @@ When encryption is enabled, clipboard data is encrypted directly on the client d
 
 Enabling the encryption option is all that's needed to activate encryption by default. However, advanced users have the option to further customize the encryption process by adjusting the following parameters:
 
-- **Salt**: An optional string used as an additional input in the hashing process. For example, you could use a unique string like `"myCustomSalt123"` to enhance encryption security.
+- **Encryption salt**: An optional string used as an additional input in the hashing process. For example, you could use a unique string like `"myCustomSalt123"` to enhance encryption security.
   
-- **Hash Rounds**: An integer that specifies the number of hashing iterations. Increasing the hash rounds strengthens encryption by making it more computationally demanding. You can increase the default value of 664,937 to a higher number, such as 1,000,000, to boost security.
+- **Key derivation iterations**: An integer that specifies the number of hashing iterations. Increasing the number of iterations strengthens encryption by making it more computationally demanding. You can increase the default value of 664,937 to a higher number, such as 1,000,000, to boost security.
 
-It is crucial to ensure the same **salt** and **hash rounds** are used across all client devices to maintain compatibility.
+It is crucial to ensure the same **encryption salt** and **key derivation iterations** are used across all client devices to maintain compatibility.
 
-You can adjust these settings in the **Extra Config** section on the login page for users who require enhanced encryption options.
+You can adjust these settings in the **advanced settings** section on the login page for users who require enhanced encryption options.
 
 <img src="https://github.com/user-attachments/assets/59252f1c-c149-43c2-b0a2-c09ca075a5c1" alt="e2e_p2s" />
 
@@ -1118,7 +1187,11 @@ You can adjust these settings in the **Extra Config** section on the login page 
 * * * * * * *
 
 ### 📋 Clipboard Functioning
+
 - **Text and Images**: These are directly copied to the clipboard, enabling seamless sharing across devices.  
+
+  **Android:** Content can exceed Android's system clipboard transaction limit even when ClipCascade's local limit is disabled. If copying fails with a system-limit message, use a smaller image or text selection, or transfer large text as a file. Increasing ClipCascade's limit cannot bypass Android's restriction.
+
 - **Files**: When files are received, a notification icon appears in the system tray (on desktop platforms). Since the clipboard does not store files, only their file paths are retained.  
   
    <table>
@@ -1135,7 +1208,6 @@ You can adjust these settings in the **Extra Config** section on the login page 
         <td><img src="https://github.com/user-attachments/assets/c06e8584-fbed-4ae1-b3b3-d12664115178" alt="android_home_screen" width="150" /></td>
     </tr>
    </table>
-
 
 - **Clipboard Monitoring**:
 
@@ -1210,50 +1282,56 @@ You can adjust these settings in the **Extra Config** section on the login page 
   </table>
 
 
+## Server API Documentation
+
+To build an alternative client, see the [Server API and client implementation guide](ClipCascade_Server/API.md).
+It covers authentication and CSRF, HTTP endpoints, admin operations, P2S/STOMP and
+P2P/WebRTC protocols, clipboard encryption and payload formats, fragmentation,
+reconnection, and working examples with an interoperability checklist.
+
 ## ⇄ Reverse Proxy Setup
 
-Below is a screenshot demonstrating how to configure a reverse proxy using **Cloudflare Tunnels**. Similar configurations can be applied with other providers as well.
+See the [reverse-proxy configuration examples](ClipCascade_Server/reverse-proxy/README.md)
+for **Nginx, Traefik, Caddy, and Nginx Proxy Manager**. The examples stay in the
+repository and include Compose files, certificate setup, custom HTTPS ports, and
+a login/WebSocket connection checker. They have been checked locally, but need
+validation with your own network, certificates, and client devices before deployment.
+
+Clients need both HTTPS for login/API calls and WSS for live synchronization.
+Loading the website does not prove the authenticated WebSocket works. Enter the
+final public server URL in every client, including a custom port when used
+(e.g. `https://clipboard.example.com:8743`), without `/login` or a path prefix.
+
+When TLS ends at the proxy, configure the **ClipCascade server** with
+`SERVER_FORWARD_HEADERS_STRATEGY=framework`. Configure the **proxy** to forward the
+original scheme, hostname, and public port, and support both `/clipsocket` (P2S)
+and `/p2psignaling` (P2P). The bundled setups do this together. Keep a backend that
+trusts forwarded headers accessible only through trusted proxies.
+
+See the guide's [troubleshooting table](ClipCascade_Server/reverse-proxy/README.md#troubleshooting-reports)
+for cookies, redirects, TLS, origin checks, session loss after restart, and
+WebSocket disconnects. P2P data travels directly between clients; a working HTTPS
+proxy does not guarantee direct WebRTC connectivity.
+
+The screenshots below show a **Cloudflare Tunnel** configuration and the desktop
+login form. See the guide above for the corresponding server forwarding settings.
 
 <img src="https://github.com/user-attachments/assets/0f45879f-307a-4f5f-9f26-ca5d3de7b1cf" alt="Reverse Proxy web" width="600" />
 
 <img src="https://github.com/user-attachments/assets/5cdca092-8d6b-4b3e-ac2b-fb10390a4ca2" alt="login form desktop" width="400" />
 
-### Note:
-For other providers, you may need to configure HTTP to HTTPS redirection manually by adding a permanent redirection rule.
-
-Example: Caddy Configuration
-```
-http://clipcascade.sample.com {
-	redir https://clipcascade.sample.com{uri} permanent
-}
-```
-
-### Note:
-Additionally, it might be helpful to mention that the server uses WebSockets (ws/wss) for live clipboard broadcasting. In most cases, no extra configuration is needed for WebSockets since they typically rely on an HTTP switching protocol. Most providers will support WebSocket connections out of the box, without requiring additional setup. Example: `ws://localhost:8080/clipsocket`, `ws://localhost:8080/p2psignaling`.
-
-
 ## 🔓 SSO Proxy Bypass Rules
 
-When fronting ClipCascade with an SSO proxy (Auth0, Keycloak, etc.), you’ll need to exempt both the unauthenticated HTTP URLs _and_ the raw-WebSocket handshake endpoints. Add these rules to your proxy’s “bypass” or “whitelist” list:
+Native clients use ClipCascade's own username/password and session cookies. They
+cannot complete an external browser-only SSO/MFA or bot-challenge page. Exempting
+only `/login` and the WebSocket endpoints is insufficient because clients also
+call authenticated API routes and follow the login redirect to `/`.
 
-#### HTTP(S) endpoints
-```
-/login
-/logout
-/signup
-/captcha
-/help
-/donate
-/health
-/ping
-/assets/**
-```
-
-#### WebSocket handshake endpoints
-```
-/p2psignaling   # P2P mode
-/clipsocket     # P2S mode
-```
+Use a dedicated client hostname that bypasses the external authentication layer
+for the whole ClipCascade application, while retaining ClipCascade's own login
+and network access controls. Keep an SSO-protected browser hostname separate.
+See [SSO and Cloudflare guidance](ClipCascade_Server/reverse-proxy/README.md#browser-sso-cloudflare-and-network-boundaries)
+and the [API guide](ClipCascade_Server/API.md) before applying route-specific rules.
 
 ## 🔧 Usage
 

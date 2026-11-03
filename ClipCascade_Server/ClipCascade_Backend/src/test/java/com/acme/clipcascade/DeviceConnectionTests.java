@@ -47,7 +47,7 @@ class DeviceConnectionTests {
         when(devices.registerDevice(any(), any(), any(), any(), any(), any()))
                 .thenReturn(new Device("owner-scoped-id", "owner"));
         var controller = new ClipCascadeController(mock(ClipCascadeProperties.class), null, null,
-                messages, null, null, null, null, null, null, devices, history);
+                messages, null, null, null, null, null, null, devices, history, null);
         var headers = SimpMessageHeaderAccessor.create();
         headers.setSessionId("socket");
         headers.setSessionAttributes(Map.of());
@@ -105,7 +105,7 @@ class DeviceConnectionTests {
         listener.handleWebSocketConnectedListener(new SessionConnectedEvent(this, message));
         var history = mock(ClipboardHistoryService.class);
         var controller = new ClipCascadeController(mock(ClipCascadeProperties.class), null, null,
-                mock(SimpMessagingTemplate.class), null, null, null, null, null, null, devices, history);
+                mock(SimpMessagingTemplate.class), null, null, null, null, null, null, devices, history, null);
         controller.sendPrivateMessage(authentication(),
                 new ClipboardData("queued synthetic clip", "text", Map.of("deviceId", "browser-uuid")), stomp);
 
@@ -123,7 +123,7 @@ class DeviceConnectionTests {
         var devices = new DeviceService(repository);
         var history = mock(ClipboardHistoryService.class);
         var controller = new ClipCascadeController(mock(ClipCascadeProperties.class), null, null,
-                mock(SimpMessagingTemplate.class), null, null, null, null, null, null, devices, history);
+                mock(SimpMessagingTemplate.class), null, null, null, null, null, null, devices, history, null);
         var headers = SimpMessageHeaderAccessor.create();
         headers.setSessionId("unknown-socket");
         headers.setSessionAttributes(Map.of());

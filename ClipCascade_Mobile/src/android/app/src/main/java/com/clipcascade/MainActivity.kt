@@ -2,29 +2,35 @@
 package com.clipcascade
 
 import android.content.Intent
+import android.content.Context
 import android.os.Bundle
 import com.facebook.react.ReactActivity
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.ReactActivityDelegate
-import com.facebook.react.bridge.ReactContext
 import com.facebook.react.ReactInstanceManager
 import com.facebook.react.devsupport.interfaces.DevSupportManager
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import androidx.work.WorkManager
 import androidx.work.PeriodicWorkRequestBuilder
 import java.util.concurrent.TimeUnit
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.PeriodicWorkRequest
 import android.util.Log
-import android.net.Uri
 
 
 class MainActivity : ReactActivity() {
     companion object {
         const val TAG = "ClipCascade"
         const val WORK_NAME = "schedule_work"
+
+        fun scheduleJob(context: Context) {
+            val request = PeriodicWorkRequestBuilder<ScheduleService>(15, TimeUnit.MINUTES)
+                .addTag(WORK_NAME)
+                .build()
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request
+            )
+        }
     }
 
     /**
@@ -42,13 +48,15 @@ class MainActivity : ReactActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        intent?.let { handleIntent(it) }
+        intent?.let {
+            if (savedInstanceState == null) handleIntent(it) else clearShareIntent(it)
+        }
 
         try{
             val bridgeData = AsyncStorageBridge(applicationContext)
             val enablePeriodicChecks = bridgeData.getValue("enable_periodic_checks")?.toBoolean() ?: true
             if(enablePeriodicChecks) { 
-                scheduleJob()
+                scheduleJob(applicationContext)
                 if(ScheduleService.hasNotificationPermission(applicationContext) == true) {
                     ScheduleService.removeNotificationIfPresent(applicationContext)
                 }
@@ -57,26 +65,6 @@ class MainActivity : ReactActivity() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error scheduling job", e)
-        }
-    }
-
-    private fun scheduleJob() {
-        // Check if the work is already scheduled
-        val workInfos = WorkManager.getInstance(applicationContext).getWorkInfosByTag(WORK_NAME).get()
-        if (workInfos.isEmpty() || 
-            (workInfos[0].state != androidx.work.WorkInfo.State.RUNNING && 
-            workInfos[0].state != androidx.work.WorkInfo.State.ENQUEUED)) {
-            // Periodic work request to run every 15 minutes
-            val periodicWorkRequest: PeriodicWorkRequest = PeriodicWorkRequestBuilder<ScheduleService>(15, TimeUnit.MINUTES)
-                .addTag(WORK_NAME)
-                .build()
-
-            WorkManager.getInstance(applicationContext)
-                .enqueueUniquePeriodicWork(
-                    WORK_NAME, 
-                    ExistingPeriodicWorkPolicy.REPLACE, 
-                    periodicWorkRequest
-                )
         }
     }
 
@@ -96,44 +84,23 @@ class MainActivity : ReactActivity() {
     }
 
     private fun handleIntent(intent: Intent) {
-        // Handle single shared text
-        if (Intent.ACTION_SEND == intent.action && "text/plain" == intent.type) {
-            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
-            sharedText?.let {
-                sendToReactNative("SHARED_TEXT", "text", it)
-            }
+        // Android may restore the task's original share intent from Recents,
+        // even after the activity's own intent has been consumed.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) {
+            clearShareIntent(intent)
         }
-
-        // Handle text via text-selection popup (PROCESS_TEXT)
-        else if (Intent.ACTION_PROCESS_TEXT == intent.action && "text/plain" == intent.type) {
-            val sharedText = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
-            sharedText?.let {
-                sendToReactNative("SHARED_TEXT", "text", it.toString())
-            }
-        }
-
-        // Handle single image
-        else if (Intent.ACTION_SEND == intent.action && intent.type?.startsWith("image/") == true) {
-            val imageUri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            imageUri?.let {
-                sendToReactNative("SHARED_IMAGE", "image", it.toString())
-            }
-        }
-        
-        // Handle single file (any type)
-        else if (Intent.ACTION_SEND == intent.action && intent.type != null) {
-            val fileUri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            fileUri?.let {
-                sendToReactNative("SHARED_FILES", "files", it.toString())
-            }
-        }
-
-        // Handle multiple files (any type)
-        else if (Intent.ACTION_SEND_MULTIPLE == intent.action && intent.type != null) {
-            val fileUris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-            fileUris?.let {
-                val uriList = it.map(Uri::toString).joinToString(",")
-                sendToReactNative("SHARED_FILES", "files", uriList)
+        ClipboardContent.fromIntent(intent, contentResolver)?.let { content ->
+            PendingShares.add(content)
+            // Buffer first, then consume before notifying JavaScript. Keep URI
+            // grant flags so the buffered attachments remain readable.
+            clearShareIntent(intent)
+            try {
+                reactInstanceManager.currentReactContext
+                    ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                    ?.emit("SHARE_AVAILABLE", null)
+            } catch (e: Exception) {
+                // The startup slot remains available if React is not ready yet.
+                Log.d(TAG, "Share buffered until JavaScript initializes", e)
             }
         }
 
@@ -151,14 +118,19 @@ class MainActivity : ReactActivity() {
         }
     }
 
-    // Send data to React Native
-    private fun sendToReactNative(eventName: String, key: String, value: String) {
-        val reactContext = reactInstanceManager.currentReactContext
-        reactContext?.let {
-            val params = Arguments.createMap().apply { putString(key, value) }
-            it
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                .emit(eventName, params)
-        }
+    private fun clearShareIntent(intent: Intent) {
+        if (intent.action != Intent.ACTION_SEND &&
+            intent.action != Intent.ACTION_SEND_MULTIPLE &&
+            intent.action != Intent.ACTION_PROCESS_TEXT) return
+
+        intent.action = Intent.ACTION_MAIN
+        intent.removeExtra(Intent.EXTRA_STREAM)
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        intent.removeExtra(Intent.EXTRA_HTML_TEXT)
+        intent.removeExtra(Intent.EXTRA_PROCESS_TEXT)
+        intent.clipData = null
+        intent.type = null
+        setIntent(intent)
     }
+
 }

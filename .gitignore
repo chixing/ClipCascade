@@ -1,5 +1,7 @@
 private/
 screenshots/
+/database/
+/logs/
 .DS_Store
 .vscode/
 # Runtime databases and credentials belong outside source control.

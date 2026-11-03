@@ -56,7 +56,7 @@ services:
       # # Default: stun:stun.l.google.com:19302
       # - CC_P2P_STUN_URL=stun:stun.l.google.com:19302
 
-      # # ⚙️ Specifies which domains are allowed to connect to the WebSocket (CORS policy).
+      # # ⚙️ Specifies which domains are allowed to connect to the WebSocket (origin check).
       # # Replace the URL with your ClipCascade server's domain.
       # # If not set, all origins are allowed by default, which may be less secure.
       # - CC_ALLOWED_ORIGINS=https://clipcascade.example.com
@@ -64,6 +64,11 @@ services:
       # # ⚙️ Toggle to enable or disable the signup feature/page for public users.
       # # Default: false
       # - CC_SIGNUP_ENABLED=false
+
+      # # ⚙️ Sets CAPTCHA difficulty as a percentage from 0 (easiest) to 100 (hardest).
+      # # Lower values reduce visual noise and distortion while keeping a basic challenge.
+      # # Default: 100
+      # - CC_CAPTCHA_DIFFICULTY_PERCENT=100
 
       # # ⚙️ Sets the maximum number of user accounts that can be created on the server.
       # # Set to -1 for unlimited accounts.
@@ -83,9 +88,15 @@ services:
       - CC_PORT=8086
 
       # # ⚙️ Configure the server session timeout.
-      # # Note: On restart, the session will be logged out.
+      # # Note: On restart, sessions are logged out unless persistence below is enabled.
       # # Default: 525960m  (1 year)
       # - CC_SESSION_TIMEOUT=525960m
+
+      # # ⚙️ Keep login sessions across server restarts in the existing H2/PostgreSQL database.
+      # # Requires persistent database storage (the /database volume above for H2).
+      # # Disabling and starting the server deletes saved sessions. Use HTTPS and protect backups.
+      # # Default: false
+      # - CC_SESSION_PERSISTENCE_ENABLED=true
 
       # # ⚙️ Maximum number of global WebSocket connections allowed (default: -1 for unlimited).
       # # Supported only in P2P mode.
@@ -96,6 +107,11 @@ services:
       # # Supported only in P2P mode.
       # # Note: This value represents the maximum connections allowed per individual user.
       # - CC_MAX_WS_CONNECTIONS_PER_USER=-1
+
+      # # ⚙️ Maximum P2P signaling messages allowed per WebSocket session per second.
+      # # Short bursts up to this limit are allowed; excess messages are dropped.
+      # # Set to 0 or less to disable the limiter. Default: -1 (disabled)
+      # - CC_P2P_SIGNALING_RATE_LIMIT_PER_SEC=-1
 
       # # ------------------------------------------------- # #
       # #    Brute Force Attack (BFA) Protection Settings   # #

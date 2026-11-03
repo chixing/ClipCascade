@@ -44,8 +44,8 @@ class ClipboardHistoryHttpTests {
         TestHttpClient owner = TestHttpClient.login(users, port, RoleConstants.ADMIN);
         var response = owner.get("/admin/dashboard");
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).contains("filter-pinned", "togglePinned", "populateDeviceFilters")
-                .endsWith("</html>\n");
+        assertThat(response.body().stripTrailing()).contains("filter-pinned", "togglePinned", "populateDeviceFilters")
+                .endsWith("</html>");
     }
 
     @Test

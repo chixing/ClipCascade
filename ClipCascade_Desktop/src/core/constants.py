@@ -165,18 +165,19 @@ if PLATFORM.startswith(LINUX):
 
 # App version
 if PLATFORM == WINDOWS:
-    APP_VERSION = "3.2.0"
+    APP_VERSION = "3.4.1"
 elif PLATFORM == MACOS:
-    APP_VERSION = "3.2.0"
+    APP_VERSION = "3.4.1"
 elif PLATFORM.startswith(LINUX):
     if XMODE:
-        APP_VERSION = "3.2.0"  # gui version
+        APP_VERSION = "3.4.1"  # gui version
     else:
-        APP_VERSION = "3.2.0"  # non-gui(cli) version
+        APP_VERSION = "3.4.1"  # non-gui(cli) version
 
 
 # core constants
-RECONNECT_WS_TIMER = 10  # seconds
+RECONNECT_WS_TIMER = 10  # seconds between failed attempts, before jitter
+RECONNECT_WS_JITTER_RATIO = 0.25  # +/-25% jitter to avoid thundering herd
 WEBSOCKET_TIMEOUT = 3000  # milliseconds
 
 # P2P signaling WebSocket keepalive (RFC 6455 ping/pong).
@@ -187,6 +188,12 @@ P2P_DC_HEARTBEAT_INTERVAL_SEC = 20
 # After sleep, aiortc RTCPeerConnection.close() can block; cap wait so the asyncio
 # thread does not stall (which would also block processing ASSIGNED_ID / PEER_LIST).
 P2P_PC_CLOSE_TIMEOUT_SEC = 5.0
+# Bound negotiation even when ICE never transitions to failed/closed.
+P2P_CONNECTION_TIMEOUT_SEC = 90
+
+# Drop partially-received fragment buffers idle for this many seconds. Prevents
+# memory leak when a sender drops the final fragment mid-transfer.
+P2P_FRAGMENT_TTL_SEC = 60
 
 LOG_FILE_NAME = "clipcascade_log.log"
 LOG_LEVEL = logging.INFO  # Use valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
