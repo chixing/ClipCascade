@@ -21,8 +21,8 @@ public class UserPrincipal implements UserDetails, CredentialsContainer {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    // Read sessions written before upstream flattened the principal. New sessions
-    // keep the legacy field null so password hashes never enter the session store.
+    // Read sessions written before upstream flattened the principal. The legacy
+    // projection stays password-free and lets the recovery image read new sessions.
     @Serial
     private static final ObjectStreamField[] serialPersistentFields = {
             new ObjectStreamField("user", Users.class),
@@ -70,7 +70,7 @@ public class UserPrincipal implements UserDetails, CredentialsContainer {
     @Serial
     private void writeObject(ObjectOutputStream output) throws IOException {
         ObjectOutputStream.PutField fields = output.putFields();
-        fields.put("user", null);
+        fields.put("user", new Users(username, null, role, enabled));
         fields.put("username", username);
         fields.put("role", role);
         fields.put("enabled", enabled);

@@ -72,7 +72,7 @@ public class SessionPersistenceConfiguration {
     }
 
     @Configuration(proxyBeanMethods = false)
-    @ConditionalOnProperty(name = "app.session.persistence.enabled", havingValue = "true")
+    @ConditionalOnProperty(name = "app.session.persistence.enabled", havingValue = "true", matchIfMissing = true)
     static class PersistentSessions {
 
         @Bean

@@ -6,6 +6,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -58,6 +59,22 @@ class UserPrincipalCompatibilityTests {
                 assertThat(restored.getPassword()).isNull();
                 assertThat(new String(write(restored), StandardCharsets.ISO_8859_1))
                         .doesNotContain("legacy-secret-hash");
+                try (var oldInput = new ObjectInputStream(new ByteArrayInputStream(write(restored))) {
+                    @Override protected Class<?> resolveClass(ObjectStreamClass descriptor)
+                            throws java.io.IOException, ClassNotFoundException {
+                        return descriptor.getName().equals(UserPrincipal.class.getName())
+                                ? loader.loadClass(descriptor.getName()) : super.resolveClass(descriptor);
+                    }
+                }) {
+                    Object rollbackPrincipal = oldInput.readObject();
+                    var field = rollbackPrincipal.getClass().getDeclaredField("user");
+                    field.setAccessible(true);
+                    Users rollbackUser = (Users) field.get(rollbackPrincipal);
+                    assertThat(rollbackUser.getUsername()).isEqualTo("existing-admin");
+                    assertThat(rollbackUser.getRole()).isEqualTo("ADMIN");
+                    assertThat(rollbackUser.getEnabled()).isEqualTo(enabled);
+                    assertThat(rollbackUser.getPassword()).isNull();
+                }
             }
         }
     }
