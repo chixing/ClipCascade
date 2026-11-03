@@ -20,7 +20,7 @@ from stomp_ws.frame import Frame
 
 def transport_method(path, name, namespace):
     """Run the real transport method with UI/network dependencies replaced."""
-    source = ast.parse((SOURCE / path).read_text())
+    source = ast.parse((SOURCE / path).read_text(encoding="utf-8"))
     manager = next(node for node in source.body if isinstance(node, ast.ClassDef))
     method = next(node for node in manager.body if isinstance(node, ast.FunctionDef) and node.name == name)
     module = ast.Module(body=[method], type_ignores=[])
@@ -75,13 +75,13 @@ class DeviceIdentityTests(unittest.TestCase):
             "SUBSCRIPTION_DESTINATION": "/user/queue/cliptext", "SEND_DESTINATION": "/app/cliptext",
             "logging": logging, "json": json,
         }
-        connect = transport_method("stomp_ws/stomp_manager.py", "connect", namespace)
+        connect = transport_method("stomp_ws/stomp_manager.py", "_connect_once", namespace)
         send = transport_method("stomp_ws/stomp_manager.py", "send", namespace)
         manager = types.SimpleNamespace(
             config=config, is_connected=False, disconnected=False, first_conn_lost=True,
             clipboard_manager=Mock(), notification_manager=Mock(),
             _on_close=lambda *_: None, send=lambda _: None, _receive=lambda _: None,
-            _connect_lock=Lock(),
+            _connect_lock=Lock(), client=None,
         )
         success, _ = connect(manager)
         self.assertTrue(success)
@@ -97,8 +97,8 @@ class DeviceIdentityTests(unittest.TestCase):
         connect = transport_method("stomp_ws/client.py", "connect", namespace)
         transmit = transport_method("stomp_ws/client.py", "_transmit", namespace)
         client = types.SimpleNamespace(url="wss://example.invalid/clipsocket", _connect=Mock(), ws=Mock(),
-                                       connected=True, _connected_event=Event())
-        client._connected_event.set()
+                                       connected=True, _ready=Event(), _closed=Event())
+        client._ready.set()
         client._transmit = types.MethodType(transmit, client)
         expected = get_device_info(self.config)
 
@@ -123,13 +123,16 @@ class DeviceIdentityTests(unittest.TestCase):
             "P2P_WS_PING_INTERVAL_SEC": 25, "P2P_WS_PING_TIMEOUT_SEC": 20,
             "logging": logging,
         }
-        connect = transport_method("p2p/p2p_manager.py", "connect", namespace)
+        connect = transport_method("p2p/p2p_manager.py", "_connect_once", namespace)
         manager = types.SimpleNamespace(
             config=config, ws_client=None, is_connected=False, is_login_phase=False,
             is_clipboard_monitoring_on=False, clipboard_manager=Mock(), send=lambda _: None,
             _on_ws_open=lambda _: None, _on_ws_error=lambda *_: None,
             _on_ws_message=lambda *_: None, _on_ws_close=lambda *_: None,
+            _disconnect_future=None, disconnected=False,
+            _prepare_reconnect_bootstrap=lambda: None, schedule_task=Mock(),
         )
+        namespace["Thread"].return_value.start.side_effect = lambda: setattr(manager, "is_connected", True)
         success, _ = connect(manager)
         self.assertTrue(success)
         header = websocket.WebSocketApp.call_args.kwargs["header"]

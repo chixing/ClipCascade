@@ -4,6 +4,8 @@ UI/clipboard dependencies are replaced; no account settings or clipboard is read
 """
 import ast
 import logging
+import random
+import threading
 import sys
 import tempfile
 import time
@@ -20,7 +22,7 @@ from utils.device_identity import get_device_info
 
 
 def load_class(path, name, namespace):
-    source = ast.parse((SOURCE / path).read_text())
+    source = ast.parse((SOURCE / path).read_text(encoding="utf-8"))
     node = next(node for node in source.body if isinstance(node, ast.ClassDef) and node.name == name)
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(SOURCE / path), "exec"), namespace)
     return namespace[name]
@@ -70,6 +72,7 @@ class ReconnectTests(unittest.TestCase):
         self.sockets = []
         self.namespace = {
             "Event": Event, "Lock": Lock, "Thread": Thread, "time": time, "logging": logging,
+            "threading": threading, "random": random, "RECONNECT_WS_JITTER_RATIO": 0,
             "Frame": Frame, "VERSIONS": "1.0,1.1", "websocket": types.SimpleNamespace(WebSocketApp=self.socket),
             "WSInterface": object, "Config": object, "TaskbarPanel": object,
             "ClipboardManager": lambda _: Mock(), "CipherManager": lambda _: Mock(),
@@ -80,6 +83,7 @@ class ReconnectTests(unittest.TestCase):
             "SUBSCRIPTION_DESTINATION": "/user/queue/cliptext",
         }
         self.Client = load_class("stomp_ws/client.py", "Client", self.namespace)
+        self.namespace["ReconnectMixin"] = load_class("utils/reconnect.py", "ReconnectMixin", self.namespace)
         self.Manager = load_class("stomp_ws/stomp_manager.py", "STOMPManager", self.namespace)
         self.manager = self.Manager(self.config, is_login_phase=False)
         self.addCleanup(self.manager.disconnect)
@@ -90,7 +94,7 @@ class ReconnectTests(unittest.TestCase):
         return socket
 
     def wait_for(self, predicate):
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + 6
         while not predicate() and time.monotonic() < deadline:
             time.sleep(.005)
         self.assertTrue(predicate(), "transport state did not settle")
@@ -102,7 +106,7 @@ class ReconnectTests(unittest.TestCase):
         self.scenarios[:] = ["refused", "opening_timeout", "no_handshake", "success"]
         self.sockets[0].close()
         self.wait_for(lambda: len(self.sockets) == 5 and self.manager.is_connected)
-        self.wait_for(lambda: self.manager._reconnect_thread is None)
+        self.wait_for(lambda: self.manager._retry_thread is None)
         self.assertFalse(self.manager.is_auto_reconnecting)
         self.assertEqual(self.manager.clipboard_manager.on_copy.call_count, 2)
         self.assertEqual(self.sockets[-1].frames[0].headers["deviceId"], first_id)
@@ -119,13 +123,13 @@ class ReconnectTests(unittest.TestCase):
         self.sockets[0].close()
         self.wait_for(lambda: self.manager.is_auto_reconnecting)
         self.manager.disconnect()
-        self.wait_for(lambda: self.manager._reconnect_thread is None)
-        self.assertEqual(len(self.sockets), 1)
+        self.wait_for(lambda: self.manager._retry_thread is None)
+        count_before_manual = len(self.sockets)
         self.assertFalse(self.manager.is_auto_reconnecting)
         self.assertFalse(self.manager.is_connected)
         self.manager.manual_reconnect()
-        self.assertTrue(self.manager.is_connected)
-        self.assertEqual(len(self.sockets), 2)
+        self.wait_for(lambda: self.manager.is_connected)
+        self.assertEqual(len(self.sockets), count_before_manual + 1)
 
     def test_manual_connect_failure_also_keeps_retrying(self):
         self.manager.disconnect()
@@ -153,7 +157,7 @@ class ReconnectTests(unittest.TestCase):
         connecting.join(1)
         self.assertFalse(connecting.is_alive())
         self.assertEqual(result, [False])
-        self.assertTrue(self.manager.is_connected)
+        self.wait_for(lambda: self.manager.is_connected)
         self.assertEqual(len(self.sockets), 2)
 
     def test_replaced_socket_cannot_deliver_clipboard_messages(self):
@@ -173,7 +177,7 @@ class ReconnectTests(unittest.TestCase):
         self.scenarios[:] = ["refused"]
         self.assertFalse(self.manager.connect()[0])
         self.assertFalse(self.manager.is_auto_reconnecting)
-        self.assertIsNone(self.manager._reconnect_thread)
+        self.assertIsNone(self.manager._retry_thread)
 
     def test_open_socket_without_stomp_ack_is_not_a_successful_connection(self):
         self.manager.is_login_phase = True

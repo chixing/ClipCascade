@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="https://www.thymeleaf.org">
   <head>
+    <!-- Apply the saved or system theme before the page is painted. -->
+    <script src="/assets/js/theme.js"></script>
+    <link rel="manifest" href="/assets/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png" />
+    <meta name="theme-color" content="#2866c4" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="ClipCascade" />
     <title>ClipCascade - Create Account</title>
     <meta charset="utf-8" />
     <meta
@@ -50,8 +57,20 @@
         margin-top: 10px;
       }
     </style>
+    <link rel="stylesheet" href="/assets/css/theme.css" />
+    <link rel="stylesheet" href="/assets/css/responsive.css" />
   </head>
-  <body>
+  <body class="auth-page">
+    <div class="theme-corner"><button type="button" id="theme-toggle" class="theme-toggle" role="switch"
+        aria-label="Dark mode" aria-checked="false" title="Switch to dark mode">
+        <svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
+        </svg>
+        <svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z" />
+        </svg>
+      </button></div>
     <div class="container">
       <div class="app-title">
         <a href="/login" style="text-decoration: none; color: inherit"
@@ -64,7 +83,14 @@
         th:action="@{/signup}"
         method="post"
       >
-        <h2 class="form-signup-heading">Create an Account</h2>
+        <div class="signup-header">
+          <a class="back-to-login" href="/login" aria-label="Back to login" title="Back to login">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path d="m12 5-7 7 7 7M5 12h14" />
+            </svg>
+          </a>
+          <h2 class="form-signup-heading">Create an Account</h2>
+        </div>
         <div id="errorDiv" class="alert alert-danger" style="display: none">
           Registration error. Please try again.
         </div>
@@ -74,6 +100,10 @@
             type="text"
             id="username"
             name="username"
+            autocomplete="username"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
             class="form-control"
             placeholder="Username"
             required="required"
@@ -88,6 +118,7 @@
             type="password"
             id="password"
             name="password"
+            autocomplete="new-password"
             class="form-control"
             placeholder="Password"
             required="required"
@@ -103,6 +134,7 @@
             type="password"
             id="confirmPassword"
             name="confirmPassword"
+            autocomplete="new-password"
             class="form-control"
             placeholder="Confirm Password"
             required="required"
