@@ -20,13 +20,13 @@ import org.springframework.context.annotation.DependsOn;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.session.jdbc.JdbcIndexedSessionRepository;
 import org.springframework.session.web.http.CookieHttpSessionIdResolver;
 import org.springframework.session.web.http.CookieSerializer;
 import org.springframework.session.web.http.SessionRepositoryFilter;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** Opt-in session storage. Boot's automatic store selection is deliberately disabled. */
@@ -78,11 +78,12 @@ public class SessionPersistenceConfiguration {
         @Bean
         @DependsOn("sessionStorageInitializer")
         JdbcIndexedSessionRepository sessionRepository(DataSource dataSource,
+                PlatformTransactionManager transactionManager,
                 @Value("${server.servlet.session.timeout}") Duration timeout) {
-            // Use independent transactions on the same JDBC connection source for session writes,
-            // including when a request is changing an account in a JPA transaction.
-            TransactionTemplate transactions = new TransactionTemplate(
-                    new DataSourceTransactionManager(dataSource));
+            // Use the application's JPA-aware manager so open-in-view requests
+            // reuse their connection instead of exhausting the pool at response
+            // commit. Active account-change transactions still suspend below.
+            TransactionTemplate transactions = new TransactionTemplate(transactionManager);
             transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
             JdbcIndexedSessionRepository repository = new JdbcIndexedSessionRepository(
                     new JdbcTemplate(dataSource), transactions);
