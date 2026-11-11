@@ -59,3 +59,18 @@ test('pin updates send JSON and CSRF, and unpinned filter is sent as false', asy
   assert.equal(requests[0].options.body, '{"pinned":true}');
   assert.match(requests[1].url, /pinned=false/);
 });
+
+test('opaque encrypted history has no image probe and cannot copy ciphertext as plaintext', async () => {
+  const { context, elements, page } = dashboard();
+  page.content[0] = { id: 123, payloadType: 'image', payloadFormat: 'ccb1',
+    payload: 'opaque-frame', payloadPreview: '[Encrypted image: 20 B]', payloadSize: 20 };
+  context.page = page;
+  vm.runInContext('renderHistory(page)', context);
+  assert.doesNotMatch(elements.get('history-tbody').innerHTML, /<img/);
+  assert.match(elements.get('history-tbody').innerHTML, /Encrypted image/);
+  const alerts = [];
+  context.alert = message => alerts.push(message);
+  context.item = { payloadType: 'text', payloadFormat: 'ccb1', payload: 'opaque-frame' };
+  await vm.runInContext('currentViewItem = item; copyToClipboard()', context);
+  assert.deepEqual(alerts, ['Encrypted content cannot be copied as plaintext. Use Download.']);
+});

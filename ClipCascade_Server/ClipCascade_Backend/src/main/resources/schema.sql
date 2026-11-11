@@ -46,11 +46,13 @@ CREATE TABLE IF NOT EXISTS clipboard_history (
     device_id VARCHAR(64),                         -- Device that sent this clipboard data
     payload_type VARCHAR(50) NOT NULL,             -- text, image, file
     payload CLOB,                                  -- Full clipboard content (CLOB for large text)
+    payload_format VARCHAR(16) NOT NULL DEFAULT 'legacy', -- legacy text or opaque encrypted CCB1 frame
     payload_size BIGINT,                           -- Size of payload in bytes
     created_at BIGINT NOT NULL,                    -- Timestamp when clipboard was captured
     pinned BOOLEAN NOT NULL DEFAULT FALSE          -- Preserved by automatic and bulk cleanup
 );
 ALTER TABLE clipboard_history ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE clipboard_history ADD COLUMN IF NOT EXISTS payload_format VARCHAR(16) NOT NULL DEFAULT 'legacy';
 CREATE INDEX IF NOT EXISTS idx_history_username ON clipboard_history(username);
 CREATE INDEX IF NOT EXISTS idx_history_device ON clipboard_history(device_id);
 CREATE INDEX IF NOT EXISTS idx_history_created ON clipboard_history(created_at);

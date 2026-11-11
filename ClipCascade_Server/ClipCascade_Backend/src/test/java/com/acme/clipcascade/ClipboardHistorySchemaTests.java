@@ -38,11 +38,12 @@ class ClipboardHistorySchemaTests {
             schema.populate(connection);
 
             try (var statement = connection.createStatement();
-                    var rows = statement.executeQuery("SELECT username, payload, pinned FROM clipboard_history")) {
+                    var rows = statement.executeQuery("SELECT username, payload, pinned, payload_format FROM clipboard_history")) {
                 assertThat(rows.next()).isTrue();
                 assertThat(rows.getString("username")).isEqualTo("legacy-owner");
                 assertThat(rows.getString("payload")).isEqualTo("preserved synthetic clip");
                 assertThat(rows.getBoolean("pinned")).isFalse();
+                assertThat(rows.getString("payload_format")).isEqualTo("legacy");
                 assertThat(rows.next()).isFalse();
             }
         }

@@ -3,6 +3,8 @@
 UI/clipboard dependencies are replaced; no account settings or clipboard is read.
 """
 import ast
+import json
+import uuid
 import logging
 import random
 import threading
@@ -19,6 +21,10 @@ SOURCE = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE))
 from stomp_ws.frame import Frame
 from utils.device_identity import get_device_info
+from utils import binary_protocol as binary
+from utils.relay_recipients import RelayRecipients
+from utils.clipboard_echoes import ClipboardEchoes
+from utils.transfer_limits import *
 
 
 def load_class(path, name, namespace):
@@ -71,6 +77,11 @@ class ReconnectTests(unittest.TestCase):
         self.scenarios = []
         self.sockets = []
         self.namespace = {
+            "RelayRecipients": RelayRecipients, "ClipboardEchoes": ClipboardEchoes,
+            "receive_limit_header": receive_limit_header, "LIMIT_HEADER": LIMIT_HEADER,
+            "json": json, "uuid": uuid, "binary": binary,
+            "valid_size": valid_size, "content_size": content_size, "SIZE_FIELD": SIZE_FIELD,
+            "SEND_DESTINATION": "/app/cliptext",
             "Event": Event, "Lock": Lock, "Thread": Thread, "time": time, "logging": logging,
             "threading": threading, "random": random, "RECONNECT_WS_JITTER_RATIO": 0,
             "Frame": Frame, "VERSIONS": "1.0,1.1", "websocket": types.SimpleNamespace(WebSocketApp=self.socket),
@@ -188,3 +199,83 @@ class ReconnectTests(unittest.TestCase):
                 self.assertFalse(self.manager.is_connected)
                 self.assertFalse(self.manager.client.connected)
                 self.assertTrue(self.sockets[-1].closed.is_set())
+
+
+class TransferTests(unittest.TestCase):
+    setUp = ReconnectTests.setUp
+    socket = ReconnectTests.socket
+
+    def prepare_transfer(self, plan):
+        self.manager.is_connected = True
+        self.config.data["cipher_enabled"] = False
+        self.manager.client = Mock()
+        self.manager.clipboard_manager.hash_clipboard.side_effect = lambda payload, kind: payload
+        self.manager.clipboard_manager.previous_clipboard_hash = None
+        self.manager._relay_recipients.get = lambda: plan
+        return self.manager.client
+
+    def test_mixed_recipients_share_identity_size_and_transfer_id(self):
+        client = self.prepare_transfer({True: ["new"], False: ["old"]})
+        self.manager.send("héllo")
+        calls = client.send.call_args_list
+        self.assertEqual(len(calls), 2)
+        modern = binary.decode_frame(calls[0].kwargs["body"])
+        legacy = json.loads(calls[1].kwargs["body"])
+        self.assertEqual(modern["metadata"], legacy["metadata"])
+        metadata = legacy["metadata"]
+        self.assertEqual(metadata["deviceId"], get_device_info(self.config)["deviceId"])
+        self.assertEqual(metadata[SIZE_FIELD], 6)
+        uuid.UUID(metadata["historyTransferId"])
+        self.assertEqual(calls[0].kwargs["headers"]["x-clipcascade-recipients"], "new")
+        self.assertEqual(calls[1].kwargs["headers"]["x-clipcascade-recipients"], "old")
+        self.manager.send("next update")
+        next_metadata = json.loads(client.send.call_args.kwargs["body"])["metadata"]
+        self.assertNotEqual(metadata["historyTransferId"], next_metadata["historyTransferId"])
+
+    def test_old_server_fallback_retains_identity(self):
+        client = self.prepare_transfer(None)
+        self.namespace["RequestManager"] = Mock(return_value=types.SimpleNamespace(binary_recipients=lambda: None))
+        self.manager.send("legacy")
+        client.send.assert_called_once()
+        self.assertEqual(client.send.call_args.kwargs["headers"], {})
+        body = json.loads(client.send.call_args.kwargs["body"])
+        self.assertEqual(body["metadata"]["deviceId"], get_device_info(self.config)["deviceId"])
+
+    def test_empty_recipient_snapshot_preserves_no_send_policy(self):
+        client = self.prepare_transfer({True: [], False: []})
+        self.manager.send("local only")
+        client.send.assert_not_called()
+
+    def test_cancel_or_reconnect_between_representations_stops_old_transfer(self):
+        for interrupt in (self.manager._on_local_change,
+                          lambda: setattr(self.manager, "client", Mock()),
+                          lambda: setattr(self.manager, "is_connected", False)):
+            client = self.prepare_transfer({True: ["new"], False: ["old"]})
+            client.send.side_effect = lambda **_: interrupt()
+            self.manager.send("cancel me")
+            self.assertEqual(client.send.call_count, 1)
+            self.assertIsNone(self.manager.clipboard_manager.previous_clipboard_hash)
+
+    def test_cancelled_preparation_sends_nothing(self):
+        client = self.prepare_transfer({True: ["new"], False: ["old"]})
+        self.manager.send("cancelled", is_current=lambda: False)
+        client.send.assert_not_called()
+
+    def test_encrypted_representations_share_metadata_and_keep_echo_tracking(self):
+        client = self.prepare_transfer({True: ["new"], False: ["old"]})
+        self.config.data["cipher_enabled"] = True
+        self.manager.cipher_manager.encrypt_bytes.return_value = {
+            "nonce": b"n" * 12, "tag": b"t" * 16, "ciphertext": b"opaque binary"}
+        self.manager.cipher_manager.encrypt.return_value = {
+            "nonce": "legacy nonce", "tag": "legacy tag", "ciphertext": "opaque legacy"}
+        self.namespace["CipherManager"] = types.SimpleNamespace(encode_to_json_string=lambda **envelope: json.dumps(envelope))
+        self.manager.send("private content", content_size_bytes=15)
+        calls = client.send.call_args_list
+        self.assertEqual(len(calls), 2)
+        modern = binary.decode_frame(calls[0].kwargs["body"])
+        legacy = json.loads(calls[1].kwargs["body"])
+        self.assertTrue(modern["encrypted"])
+        self.assertEqual(modern["metadata"], legacy["metadata"])
+        self.assertEqual(legacy["metadata"][SIZE_FIELD], 15)
+        self.assertNotIn("private content", calls[1].kwargs["body"])
+        self.assertTrue(self.manager._sent_echoes.consume(("text", "encrypted", "legacy nonce", "legacy tag")))

@@ -35,6 +35,9 @@ public class ClipboardHistory {
 
     private Long payloadSize;
 
+    @Column(nullable = false, length = 16)
+    private String payloadFormat = "legacy";
+
     @NotNull(message = "Created at timestamp is required")
     @Column(nullable = false)
     private Long createdAt;
@@ -98,6 +101,14 @@ public class ClipboardHistory {
         this.payloadSize = payload != null ? (long) payload.length() : 0L;
     }
 
+    public String getPayloadFormat() {
+        return payloadFormat == null ? "legacy" : payloadFormat;
+    }
+
+    public void setPayloadFormat(String payloadFormat) {
+        this.payloadFormat = payloadFormat;
+    }
+
     public Long getPayloadSize() {
         return this.payloadSize;
     }
@@ -131,6 +142,9 @@ public class ClipboardHistory {
     }
 
     public String getPayloadPreview() {
+        if ("ccb1".equals(getPayloadFormat())) {
+            return "[Encrypted " + payloadType + ": " + formatSize(payloadSize) + "]";
+        }
         if (this.payload == null) {
             return "";
         }

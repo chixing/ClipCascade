@@ -32,6 +32,13 @@ This directory contains the customized Spring Boot backend and Docker Compose de
 * `CC_HISTORY_RETENTION_DAYS=0` is the default and keeps all history. Set a positive number of days in the server environment to opt into automatic cleanup. Negative values reject startup.
 * Cleanup runs one minute after startup, then once a day, deleting at most 10,000 expired unpinned clips per run in batches of 500. Existing history starts unpinned; the additive schema update preserves every existing payload.
 
+### 6. Upstream 3.5 binary transport and history
+* The relay keeps upstream recipient filtering, receive limits, no-self-echo, destination authorization, and HTTP-session-linked socket revocation. Device identity and handshake metadata remain available to the dashboard.
+* Unencrypted CCB1 text, images and files are normalized to the existing history format, retaining previews/downloads. Encrypted CCB1 frames are stored byte-for-byte as Base64 with `payload_format=ccb1`; the dashboard labels them encrypted and offers an opaque `.ccb1` download. Server-side plaintext preview/copy is unavailable because the server never receives the client encryption key.
+* The additive, repeatable `payload_format` migration defaults existing records to `legacy`; it does not rewrite old payloads or pin state.
+* This fork's desktop and browser clients attach one `historyTransferId` to both binary and legacy representations. A bounded per-WebSocket cache avoids duplicate history during mixed-recipient fan-out. Unmodified upstream clients, including stock Android, do not provide that ID and may create two records when sending both formats. No heuristic content/time deduplication is applied, so legitimate repeated copies are retained.
+* An empty recipient snapshot still emits no clipboard frame, following upstream behavior. History can only record frames received by the server. A subscribed sender is normally included in the snapshot even when no other device is connected.
+
 ## Directory Structure
 * `ClipCascade_Backend/`: Spring Boot (Java 21) backend application.
 * `docker-compose/`: Docker Compose configuration; `./cc_users/` is ignored runtime storage.

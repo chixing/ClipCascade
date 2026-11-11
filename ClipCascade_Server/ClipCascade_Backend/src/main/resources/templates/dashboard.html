@@ -872,7 +872,7 @@
         tbody.innerHTML = items.map(item => {
           const typeClass = ['text', 'image', 'files'].includes(item.payloadType) ? item.payloadType : '';
           let previewHtml = escapeHtml(item.payloadPreview || '');
-          if (item.payloadType === 'image') {
+          if (item.payloadType === 'image' && item.payloadFormat !== 'ccb1') {
             const imgSrc = `${API.history}/${item.id}/preview`;
             previewHtml = `
               <div style="display: inline-flex; align-items: center; gap: 8px;">
@@ -993,7 +993,10 @@
 
           title.textContent = `${payloadType || 'unknown'} - ${formatTime(item.createdAt)}`;
 
-          if (payloadType === 'image') {
+          if (item.payloadFormat === 'ccb1') {
+            body.textContent = 'Encrypted clipboard content. Download preserves the original CCB1 envelope; decryption requires the client key.';
+            downloadBtn.style.display = 'inline-block';
+          } else if (payloadType === 'image') {
             const imgSrc = `${API.history}/${item.id}/preview`;
             body.innerHTML = `<img src="${imgSrc}" alt="Clipboard image" style="max-width: 100%; height: auto; border-radius: 4px;" onerror="this.onerror=null; this.parentElement.innerHTML='<div>Image preview unavailable (encrypted). Use Download to save the file.</div>';">`;
             downloadBtn.style.display = 'inline-block';
@@ -1130,6 +1133,10 @@
 
       async function copyToClipboard() {
         if (!currentViewItem) return;
+        if (currentViewItem.payloadFormat === 'ccb1') {
+          alert('Encrypted content cannot be copied as plaintext. Use Download.');
+          return;
+        }
 
         const payloadType = (currentViewItem.payloadType || '').toLowerCase();
         if (payloadType === 'text') {
@@ -1154,6 +1161,10 @@
       async function copyItem(id) {
         try {
           const item = await fetchAPI(`${API.history}/${id}`);
+          if (item.payloadFormat === 'ccb1') {
+            alert('Encrypted content cannot be copied as plaintext. Use Download.');
+            return;
+          }
           const payloadType = (item.payloadType || '').toLowerCase();
           if (payloadType === 'text') {
             const success = await copyTextToClipboard(item.payload || '');

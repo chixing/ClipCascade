@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Base64;
+import java.util.Map;
 
 import javax.imageio.ImageIO;
 
@@ -99,12 +100,21 @@ class ClipboardPrivacyAndSessionTests {
         when(socket.getId()).thenReturn("revocation-" + login.username());
         when(socket.getPrincipal()).thenReturn(() -> login.username());
         when(socket.isOpen()).thenReturn(true);
-        liveWebSockets.decorate(mock(WebSocketHandler.class)).afterConnectionEstablished(socket);
+        String cookie = login.cookies().getCookieStore().getCookies().stream()
+                .filter(value -> "JSESSIONID".equals(value.getName())).findFirst().orElseThrow().getValue();
+        String loginId = new String(Base64.getDecoder().decode(cookie), java.nio.charset.StandardCharsets.UTF_8);
+        when(socket.getAttributes()).thenReturn(Map.of(
+                org.springframework.web.socket.server.support.HttpSessionHandshakeInterceptor.HTTP_SESSION_ID_ATTR_NAME,
+                loginId));
+        var tracked = liveWebSockets.decorate(mock(WebSocketHandler.class));
+        tracked.afterConnectionEstablished(socket);
+        verify(socket, never()).close(any());
         assertThat(login.get("/whoami").statusCode()).isEqualTo(200);
 
         sessionService.logoutAllSessions(login.username());
 
         verify(socket).close(org.mockito.ArgumentMatchers.argThat(status -> status.getCode() == 1008));
+        tracked.afterConnectionClosed(socket, new org.springframework.web.socket.CloseStatus(1008));
         assertThat(login.get("/whoami").statusCode()).isEqualTo(302);
         assertThat(database.queryForObject("SELECT COUNT(*) FROM SPRING_SESSION WHERE PRINCIPAL_NAME = ?",
                 Long.class, login.username())).isZero();

@@ -1,4 +1,5 @@
 import ast
+import uuid
 import concurrent.futures
 import json
 import logging
@@ -15,6 +16,10 @@ from unittest.mock import Mock
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 sys.path.insert(0, str(SOURCE))
 from utils.device_identity import get_device_info
+from utils import binary_protocol as binary
+from utils.relay_recipients import RelayRecipients
+from utils.clipboard_echoes import ClipboardEchoes
+from utils.transfer_limits import *
 from stomp_ws.frame import Frame
 
 
@@ -73,7 +78,10 @@ class DeviceIdentityTests(unittest.TestCase):
             "RequestManager": types.SimpleNamespace(format_cookie=lambda _: ""),
             "websocket_sslopt_for_config": lambda _: {}, "WEBSOCKET_TIMEOUT": 3000,
             "SUBSCRIPTION_DESTINATION": "/user/queue/cliptext", "SEND_DESTINATION": "/app/cliptext",
-            "logging": logging, "json": json,
+            "logging": logging, "json": json, "uuid": uuid, "binary": binary,
+            "RelayRecipients": RelayRecipients, "LIMIT_HEADER": LIMIT_HEADER,
+            "receive_limit_header": receive_limit_header, "valid_size": valid_size,
+            "content_size": content_size, "SIZE_FIELD": SIZE_FIELD,
         }
         connect = transport_method("stomp_ws/stomp_manager.py", "_connect_once", namespace)
         send = transport_method("stomp_ws/stomp_manager.py", "send", namespace)
@@ -81,15 +89,24 @@ class DeviceIdentityTests(unittest.TestCase):
             config=config, is_connected=False, disconnected=False, first_conn_lost=True,
             clipboard_manager=Mock(), notification_manager=Mock(),
             _on_close=lambda *_: None, send=lambda _: None, _receive=lambda _: None,
-            _connect_lock=Lock(), client=None,
+            _connect_lock=Lock(), client=None, _transfer_generation=0,
+            _on_local_change=lambda: None, _sent_echoes=ClipboardEchoes(),
         )
         success, _ = connect(manager)
         self.assertTrue(success)
         expected = get_device_info(config)
-        self.assertEqual(client.connect.call_args.kwargs["headers"], expected)
+        headers = client.connect.call_args.kwargs["headers"]
+        self.assertEqual({key: headers[key] for key in expected}, expected)
+        self.assertEqual(headers["x-clipcascade-binary"], "ccb1")
+        self.assertEqual(headers["x-clipcascade-recipient-updates"], "1")
+        self.assertEqual(headers["x-clipcascade-no-self-echo"], "true")
+        self.assertEqual(headers[LIMIT_HEADER], "unlimited")
+        manager._relay_recipients.get = lambda: {True: [], False: ["legacy"]}
         send(manager, "synthetic clipboard")
         body = json.loads(client.send.call_args.kwargs["body"])
-        self.assertEqual(body["metadata"], expected)
+        self.assertEqual({key: body["metadata"][key] for key in expected}, expected)
+        self.assertEqual(body["metadata"][SIZE_FIELD], len("synthetic clipboard"))
+        uuid.UUID(body["metadata"]["historyTransferId"])
         self.assertEqual(body["payload"], "synthetic clipboard")
 
     def test_custom_stomp_client_serializes_the_device_headers_on_the_wire(self):
@@ -131,6 +148,7 @@ class DeviceIdentityTests(unittest.TestCase):
             _on_ws_message=lambda *_: None, _on_ws_close=lambda *_: None,
             _disconnect_future=None, disconnected=False,
             _prepare_reconnect_bootstrap=lambda: None, schedule_task=Mock(),
+            _on_local_change=lambda: None, can_send_content=lambda *_: True,
         )
         namespace["Thread"].return_value.start.side_effect = lambda: setattr(manager, "is_connected", True)
         success, _ = connect(manager)

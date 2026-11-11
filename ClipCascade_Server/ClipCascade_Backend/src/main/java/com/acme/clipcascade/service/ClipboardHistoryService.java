@@ -29,11 +29,20 @@ public class ClipboardHistoryService {
 
     @Transactional
     public ClipboardHistory recordClipboard(String username, String deviceId, ClipboardData clipboardData) {
+        return recordClipboard(username, deviceId, clipboardData, "legacy");
+    }
+
+    @Transactional
+    public ClipboardHistory recordClipboard(String username, String deviceId, ClipboardData clipboardData, String format) {
         String payloadType = clipboardData.getType() != null ? clipboardData.getType() : "text";
         String payload = clipboardData.getPayload();
 
         ClipboardHistory history = new ClipboardHistory(username, deviceId, payloadType, payload);
 
+        history.setPayloadFormat(format);
+        if ("ccb1".equals(format)) {
+            history.setPayloadSize((long) java.util.Base64.getDecoder().decode(payload).length);
+        }
         return clipboardHistoryRepo.save(history);
     }
 

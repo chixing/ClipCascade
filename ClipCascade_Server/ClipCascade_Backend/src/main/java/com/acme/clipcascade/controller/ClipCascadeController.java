@@ -20,7 +20,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -43,6 +43,7 @@ import com.acme.clipcascade.model.Users;
 import com.acme.clipcascade.service.BruteForceProtectionService;
 import com.acme.clipcascade.service.CaptchaService;
 import com.acme.clipcascade.service.ClipboardHistoryService;
+import com.acme.clipcascade.service.ClipboardIngestionService;
 import com.acme.clipcascade.service.DeviceService;
 import com.acme.clipcascade.service.DonationService;
 import com.acme.clipcascade.service.FacadeUserService;
@@ -50,6 +51,7 @@ import com.acme.clipcascade.service.SessionService;
 import com.acme.clipcascade.service.UserInfoService;
 import com.acme.clipcascade.service.UserService;
 import com.acme.clipcascade.service.OnlineUsersService;
+import com.acme.clipcascade.service.P2SDeliveryService;
 import com.acme.clipcascade.service.WebSocketStatsService;
 import com.acme.clipcascade.utils.ResponseEntityUtil;
 import com.acme.clipcascade.utils.TimeUtility;
@@ -69,6 +71,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -80,7 +83,7 @@ public class ClipCascadeController {
     private final UserInfoService userInfoService;
     private final SessionService sessionService;
     private final FacadeUserService facadeUserService;
-    private final SimpMessagingTemplate simpMessagingTemplate;
+    private final P2SDeliveryService p2sDelivery;
     private final CaptchaService captchaService;
     private final BruteForceProtectionService bruteForceProtectionService;
     private final WebSocketStatsService webSocketStatsService;
@@ -88,12 +91,13 @@ public class ClipCascadeController {
     private final DonationService donationService;
     private final DeviceService deviceService;
     private final ClipboardHistoryService clipboardHistoryService;
+    private final ClipboardIngestionService clipboardIngestion;
 
     public ClipCascadeController(
             ClipCascadeProperties clipCascadeProperties,
             FacadeUserService facadeUserService,
             UserService userService,
-            @Nullable SimpMessagingTemplate simpMessagingTemplate,
+            @Nullable P2SDeliveryService p2sDelivery,
             CaptchaService captchaService,
             UserInfoService userInfoService,
             SessionService sessionService,
@@ -102,12 +106,13 @@ public class ClipCascadeController {
             DonationService donationService,
             DeviceService deviceService,
             ClipboardHistoryService clipboardHistoryService,
-            OnlineUsersService onlineUsersService) {
+            OnlineUsersService onlineUsersService,
+            ClipboardIngestionService clipboardIngestion) {
 
         this.clipCascadeProperties = clipCascadeProperties;
         this.facadeUserService = facadeUserService;
         this.userService = userService;
-        this.simpMessagingTemplate = simpMessagingTemplate;
+        this.p2sDelivery = p2sDelivery;
         this.captchaService = captchaService;
         this.userInfoService = userInfoService;
         this.sessionService = sessionService;
@@ -117,6 +122,7 @@ public class ClipCascadeController {
         this.donationService = donationService;
         this.deviceService = deviceService;
         this.clipboardHistoryService = clipboardHistoryService;
+        this.clipboardIngestion = clipboardIngestion;
     }
 
     @PostConstruct
@@ -175,15 +181,19 @@ public class ClipCascadeController {
 
     @GetMapping("/admin/advance")
     public String advance(
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        return userPrincipal.isAdmin() ? "redirect:/#advanced" : "redirect:/";
+    }
+
+    @GetMapping("/admin/advance/fragment")
+    public String advanceFragment(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             Model model) {
-
-        if (userPrincipal.isAdmin()) {
-            model.addAttribute("envVariables", clipCascadeProperties);
-            return "advance"; // advance.html
-        } else {
-            return "redirect:/"; // Redirect to the home page
+        if (!userPrincipal.isAdmin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
+        model.addAttribute("envVariables", clipCascadeProperties);
+        return "advance :: tools";
     }
 
     /**
@@ -197,7 +207,7 @@ public class ClipCascadeController {
     public void sendPrivateMessage(
             Principal principal,
             ClipboardData clipboardData,
-            org.springframework.messaging.simp.SimpMessageHeaderAccessor headerAccessor) {
+            SimpMessageHeaderAccessor headerAccessor) {
 
         if (clipCascadeProperties.isP2pEnabled()) {
             return;
@@ -214,102 +224,8 @@ public class ClipCascadeController {
                 (clipboardData.getType() == null) ? "text" : clipboardData.getType(),
                 clipboardData.getMetadata());
 
-        // Record clipboard history
-        try {
-            String deviceId = null;
-            String deviceType = null;
-            String osInfo = null;
-            Map<String, Object> metadata = clipboardData.getMetadata();
-
-            String friendlyName = null;
-            String ipAddress = null;
-
-            // First try to get deviceId from metadata (sent by client)
-            if (metadata != null && metadata.containsKey("deviceId")) {
-                Object deviceIdObj = metadata.get("deviceId");
-                deviceId = deviceIdObj != null ? deviceIdObj.toString() : null;
-            }
-            if (metadata != null && metadata.containsKey("deviceType")) {
-                Object deviceTypeObj = metadata.get("deviceType");
-                deviceType = deviceTypeObj != null ? deviceTypeObj.toString() : null;
-            }
-            if (metadata != null && metadata.containsKey("osInfo")) {
-                Object osInfoObj = metadata.get("osInfo");
-                osInfo = osInfoObj != null ? osInfoObj.toString() : null;
-            }
-            if (metadata != null && metadata.containsKey("friendlyName")) {
-                Object fnObj = metadata.get("friendlyName");
-                friendlyName = fnObj != null ? fnObj.toString() : null;
-            }
-            if (metadata != null && metadata.containsKey("ipAddress")) {
-                Object ipObj = metadata.get("ipAddress");
-                if (ipObj != null && !ipObj.toString().trim().isEmpty()) {
-                    ipAddress = ipObj.toString().trim();
-                }
-            }
-            if (headerAccessor != null && headerAccessor.getSessionAttributes() != null) {
-                if (ipAddress == null || ipAddress.isEmpty() || "0.0.0.0".equals(ipAddress) || "172.20.0.1".equals(ipAddress)) {
-                    String attrIp = (String) headerAccessor.getSessionAttributes().get("ipAddress");
-                    if (attrIp != null && !attrIp.isEmpty()) {
-                        ipAddress = attrIp;
-                    }
-                }
-                if (deviceType == null) {
-                    deviceType = WebSocketEventListener.inferDeviceType((String) headerAccessor.getSessionAttributes().get("userAgent"), null);
-                }
-                if (osInfo == null) {
-                    osInfo = WebSocketEventListener.inferOsInfo((String) headerAccessor.getSessionAttributes().get("userAgent"), null);
-                }
-            }
-            if (deviceType != null && deviceType.length() > 50) {
-                deviceType = deviceType.substring(0, 50);
-            }
-            if (osInfo != null && osInfo.length() > 100) {
-                osInfo = osInfo.substring(0, 100);
-            }
-            if (friendlyName != null && friendlyName.length() > 100) {
-                friendlyName = friendlyName.substring(0, 100);
-            }
-
-            // If no deviceId in metadata, try to get it from the WebSocket session
-            if (deviceId == null || deviceId.isEmpty()) {
-                String sessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
-                if (sessionId != null) {
-                    String mappedDeviceId = deviceService.getDeviceIdForSession(sessionId);
-                    deviceId = mappedDeviceId;
-                }
-            }
-
-            String sessionId = headerAccessor != null ? headerAccessor.getSessionId() : null;
-            Device registered = deviceService.registerDevice(deviceId, userPrincipal.getUsername(), deviceType, osInfo, ipAddress, friendlyName);
-            // Registration can resolve a legacy fallback or owner-scoped ID. Use
-            // that same ID for both presence and history, never the claimed raw ID.
-            deviceId = registered.getId();
-            if (sessionId != null) {
-                deviceService.refreshDeviceForSession(deviceId, sessionId);
-            }
-
-            clipboardHistoryService.recordClipboard(
-                    userPrincipal.getUsername(),
-                    deviceId,
-                    messageToSend);
-        } catch (Exception e) {
-            // Don't fail the message relay - history recording is non-critical
-        }
-
-        /**
-         * Send the message to the user's specific queue:
-         * - Destination: "/user/{username}/queue/cliptext"
-         * - Spring resolves the username using the Principal associated with the
-         * session.
-         * - Internally, Spring maps the WebSocket session ID to the username and routes
-         * messages accordingly.
-         * - By default username is the unique identifier for the user.
-         */
-        simpMessagingTemplate.convertAndSendToUser(
-                userPrincipal.getUsername(),
-                "/queue/cliptext",
-                messageToSend);
+        clipboardIngestion.recordLegacy(userPrincipal.getUsername(), messageToSend, headerAccessor);
+        p2sDelivery.send(userPrincipal.getUsername(), messageToSend, headerAccessor);
     }
 
     @GetMapping("/captcha")
@@ -415,6 +331,23 @@ public class ClipCascadeController {
                     .orElse(""));
             return response;
         });
+    }
+
+    @GetMapping("/admin/default-password-status")
+    public ResponseEntity<?> defaultPasswordStatus(
+            @AuthenticationPrincipal UserPrincipal userPrincipal, HttpSession session) {
+        if (!userPrincipal.isAdmin()) {
+            return ResponseEntity.status(403).build();
+        }
+
+        boolean usingDefaultPassword = userService.usesDefaultAdminPassword(userPrincipal.getUsername());
+        boolean showPrompt = usingDefaultPassword
+                && session.getAttribute(ServerConstants.DEFAULT_PASSWORD_PROMPT_SHOWN) == null;
+        if (showPrompt) {
+            session.setAttribute(ServerConstants.DEFAULT_PASSWORD_PROMPT_SHOWN, true);
+        }
+        return ResponseEntity.ok().header("Cache-Control", "no-store")
+                .body(Map.of("usingDefaultPassword", usingDefaultPassword, "showPrompt", showPrompt));
     }
 
     @GetMapping("/validate-session")
@@ -958,6 +891,10 @@ public class ClipCascadeController {
             return ResponseEntity.notFound().build();
         }
 
+        if ("ccb1".equals(item.getPayloadFormat())) {
+            return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).build();
+        }
+
         byte[] raw = safeBase64Decode(item.getPayload());
         if (raw == null || raw.length == 0) {
             return ResponseEntity.badRequest().build();
@@ -1099,6 +1036,10 @@ public class ClipCascadeController {
     }
 
     private DecodedPayload decodePayload(ClipboardHistory item, String fileName) {
+        if ("ccb1".equals(item.getPayloadFormat())) {
+            return new DecodedPayload(safeBase64Decode(item.getPayload()), "application/octet-stream",
+                    "clipboard-" + item.getId() + ".ccb1");
+        }
         String payload = item.getPayload();
         String payloadType = item.getPayloadType() != null ? item.getPayloadType().toLowerCase() : "file";
         String contentType = "application/octet-stream";

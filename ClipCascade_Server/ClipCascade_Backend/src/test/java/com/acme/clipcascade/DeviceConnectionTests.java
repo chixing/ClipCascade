@@ -16,7 +16,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.acme.clipcascade.service.P2SDeliveryService;
+import com.acme.clipcascade.service.ClipboardIngestionService;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
@@ -43,11 +44,11 @@ class DeviceConnectionTests {
     void historyAndPresenceUseTheRegisteredIdInsteadOfTheClaimedId() {
         DeviceService devices = mock(DeviceService.class);
         ClipboardHistoryService history = mock(ClipboardHistoryService.class);
-        SimpMessagingTemplate messages = mock(SimpMessagingTemplate.class);
+        P2SDeliveryService messages = mock(P2SDeliveryService.class);
         when(devices.registerDevice(any(), any(), any(), any(), any(), any()))
                 .thenReturn(new Device("owner-scoped-id", "owner"));
         var controller = new ClipCascadeController(mock(ClipCascadeProperties.class), null, null,
-                messages, null, null, null, null, null, null, devices, history, null);
+                messages, null, null, null, null, null, null, devices, history, null, new ClipboardIngestionService(devices, history, new ObjectMapper()));
         var headers = SimpMessageHeaderAccessor.create();
         headers.setSessionId("socket");
         headers.setSessionAttributes(Map.of());
@@ -105,7 +106,7 @@ class DeviceConnectionTests {
         listener.handleWebSocketConnectedListener(new SessionConnectedEvent(this, message));
         var history = mock(ClipboardHistoryService.class);
         var controller = new ClipCascadeController(mock(ClipCascadeProperties.class), null, null,
-                mock(SimpMessagingTemplate.class), null, null, null, null, null, null, devices, history, null);
+                mock(P2SDeliveryService.class), null, null, null, null, null, null, devices, history, null, new ClipboardIngestionService(devices, history, new ObjectMapper()));
         controller.sendPrivateMessage(authentication(),
                 new ClipboardData("queued synthetic clip", "text", Map.of("deviceId", "browser-uuid")), stomp);
 
@@ -123,7 +124,7 @@ class DeviceConnectionTests {
         var devices = new DeviceService(repository);
         var history = mock(ClipboardHistoryService.class);
         var controller = new ClipCascadeController(mock(ClipCascadeProperties.class), null, null,
-                mock(SimpMessagingTemplate.class), null, null, null, null, null, null, devices, history, null);
+                mock(P2SDeliveryService.class), null, null, null, null, null, null, devices, history, null, new ClipboardIngestionService(devices, history, new ObjectMapper()));
         var headers = SimpMessageHeaderAccessor.create();
         headers.setSessionId("unknown-socket");
         headers.setSessionAttributes(Map.of());
