@@ -73,11 +73,8 @@ public class UserService {
     }
 
     public List<Users> getUsers(String role) {
-        List<Users> users = userRepo.findByRoleOrderByUsernameAsc(role);
-        users.forEach(user -> {
-            user.setPassword(null);
-        }); // Set password to null
-        return users;
+        return userRepo.findByRoleOrderByUsernameAsc(role).stream()
+                .map(UserService::withoutPassword).toList();
     }
 
     private static final Map<String, Comparator<Users>> USERS_COMPARATORS = Map.of(
@@ -98,8 +95,8 @@ public class UserService {
             String direction,
             String search) {
 
-        List<Users> users = userRepo.findByRole(role);
-        users.forEach(user -> user.setPassword(null));
+        List<Users> users = userRepo.findByRole(role).stream()
+                .map(UserService::withoutPassword).toList();
 
         String needle = (search == null) ? "" : search.trim().toLowerCase();
         Predicate<Users> filter = needle.isEmpty()
@@ -125,11 +122,14 @@ public class UserService {
     }
 
     public List<Users> getAllUsers() {
-        List<Users> users = userRepo.findAll();
-        users.forEach(user -> {
-            user.setPassword(null);
-        }); // Set password to null
-        return users;
+        return userRepo.findAll().stream().map(UserService::withoutPassword).toList();
+    }
+
+    // Response-only copies preserve the legacy API shape. Never redact a managed
+    // entity: a later transaction (including JDBC session persistence under OSIV)
+    // can flush that mutation to the users table.
+    private static Users withoutPassword(Users user) {
+        return new Users(user.getUsername(), null, user.getRole(), user.getEnabled());
     }
 
     public Users verifyAdminExistence() {

@@ -62,10 +62,18 @@ public class OnlineUsersService {
             return;
         }
         String username = principal.getName();
-        p2sSessionToUser.put(sessionId, username);
-        p2sConnectionCounts
-                .computeIfAbsent(username, k -> new AtomicInteger(0))
-                .incrementAndGet();
+        // Serialize both indexes for this session. Duplicate CONNECTED events
+        // must not add a connection, and disconnect must not overtake the count.
+        p2sSessionToUser.computeIfAbsent(sessionId, id -> {
+            p2sConnectionCounts.compute(username, (user, count) -> {
+                if (count == null) {
+                    return new AtomicInteger(1);
+                }
+                count.incrementAndGet();
+                return count;
+            });
+            return username;
+        });
     }
 
     @EventListener
@@ -78,14 +86,12 @@ public class OnlineUsersService {
         if (sessionId == null) {
             return;
         }
-        String username = p2sSessionToUser.remove(sessionId);
-        if (username == null) {
-            return;
-        }
-        AtomicInteger count = p2sConnectionCounts.get(username);
-        if (count != null && count.decrementAndGet() <= 0) {
-            p2sConnectionCounts.remove(username);
-        }
+        p2sSessionToUser.computeIfPresent(sessionId, (id, username) -> {
+            // Count removal and reconnect must use the same per-user map lock.
+            p2sConnectionCounts.computeIfPresent(username,
+                    (user, count) -> count.decrementAndGet() <= 0 ? null : count);
+            return null;
+        });
     }
 
     public Map<String, Integer> getOnlineUsers() {
