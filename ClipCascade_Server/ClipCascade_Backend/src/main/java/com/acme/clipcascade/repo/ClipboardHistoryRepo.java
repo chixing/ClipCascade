@@ -40,6 +40,13 @@ public interface ClipboardHistoryRepo extends JpaRepository<ClipboardHistory, Lo
             @Param("pinned") Boolean pinned,
             Pageable pageable);
 
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE ClipboardHistory h SET h.payloadFormat = 'utf8' WHERE h.id = :id " +
+           "AND h.username = :username AND h.payloadType = 'text' " +
+           "AND h.payloadFormat = 'legacy' AND h.payload = :payload")
+    int upgradeLegacyText(@Param("id") Long id, @Param("username") String username,
+            @Param("payload") String payload);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE ClipboardHistory h SET h.pinned = :pinned WHERE h.id = :id AND h.username = :username")
     int setPinnedByIdAndUsername(@Param("id") Long id, @Param("username") String username,

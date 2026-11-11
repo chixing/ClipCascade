@@ -9,7 +9,10 @@ import static org.mockito.Mockito.*;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.Collections;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -48,8 +51,8 @@ class ClipboardIngestionServiceTests {
             ingestion.recordLegacy("owner", new ClipboardData("synthetic", "text",
                     Map.of("historyTransferId", "transfer-" + index)), headers);
         }
-        assertThat(headers.getSessionAttributes().values().stream().filter(Set.class::isInstance)
-                .map(Set.class::cast).mapToInt(Set::size).sum()).isEqualTo(256);
+        assertThat(headers.getSessionAttributes().values().stream().filter(Map.class::isInstance)
+                .map(Map.class::cast).mapToInt(Map::size).sum()).isEqualTo(256);
         var oldClient = new ClipboardData("repeated copy", "text", null);
         ingestion.recordLegacy("owner", oldClient, headers);
         ingestion.recordLegacy("owner", oldClient, headers);
@@ -77,6 +80,45 @@ class ClipboardIngestionServiceTests {
                 "metadata", Map.of("contentSizeBytes", 3, "deviceId", "claimed-id")));
         ingestion.recordBinary("owner", new byte[] {1, 2, 3}, envelope, source());
         verify(history).recordClipboard(eq("owner"), eq("owner-scoped-device"), any(), eq("ccb1"));
+    }
+
+    @Test
+    void immutableAttributesKeepBestEffortHistoryWithoutMutatingTheMap() {
+        var headers = source();
+        headers.setSessionAttributes(Collections.unmodifiableMap(Map.of("sentinel", "unchanged")));
+        var data = new ClipboardData("synthetic", "text", Map.of("historyTransferId", "same"));
+        ingestion.recordLegacy("owner", data, headers);
+        ingestion.recordLegacy("owner", data, headers);
+        verify(history, times(2)).recordClipboard("owner", "owner-scoped-device", data);
+        assertThat(headers.getSessionAttributes()).containsExactlyEntriesOf(Map.of("sentinel", "unchanged"));
+    }
+
+    @Test
+    void simultaneousCallbacksRecordOneRowAndKeepTheCacheBounded() throws Exception {
+        var headers = source();
+        var data = new ClipboardData("synthetic", "text", Map.of("historyTransferId", "same"));
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            var jobs = IntStream.range(0, 40).<Callable<Void>>mapToObj(i -> () -> {
+                ingestion.recordLegacy("owner", data, headers);
+                return null;
+            }).toList();
+            for (var result : executor.invokeAll(jobs)) result.get();
+        }
+        verify(history).recordClipboard("owner", "owner-scoped-device", data);
+    }
+
+    @Test
+    void sharedAttributeMapCannotCoalesceDifferentOwnersOrSessionIds() {
+        var first = source();
+        var second = source();
+        second.setSessionId("other-session");
+        second.setSessionAttributes(first.getSessionAttributes());
+        var data = new ClipboardData("synthetic", "text", Map.of("historyTransferId", "same"));
+        ingestion.recordLegacy("owner", data, first);
+        ingestion.recordLegacy("other-owner", data, first);
+        ingestion.recordLegacy("owner", data, second);
+        verify(history, times(2)).recordClipboard("owner", "owner-scoped-device", data);
+        verify(history).recordClipboard("other-owner", "owner-scoped-device", data);
     }
 
     private SimpMessageHeaderAccessor source() {

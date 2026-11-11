@@ -6,7 +6,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.Map;
 
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -14,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import com.acme.clipcascade.config.WebSocketEventListener;
 import com.acme.clipcascade.model.ClipboardData;
+import com.acme.clipcascade.model.ClipboardHistory;
 import com.acme.clipcascade.model.Device;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,8 +22,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /** The fork's history/device side effect, independent of the relay representation. */
 @Service
 public class ClipboardIngestionService {
-    private static final String RECORDED_IDS = ClipboardIngestionService.class.getName() + ".recordedIds";
+    private static final String RECORDED_IDS = ClipboardIngestionService.class.getName() + ".recordedTransfers";
     private static final int MAX_RECENT_IDS = 256;
+    private record TransferKey(String username, String sessionId, String transferId) {}
     private final DeviceService deviceService;
     private final ClipboardHistoryService clipboardHistoryService;
     private final ObjectMapper mapper;
@@ -49,7 +50,7 @@ public class ClipboardIngestionService {
             String payload = encrypted ? Base64.getEncoder().encodeToString(frame)
                     : legacyPayload(frame, type);
             recordSafely(username, new ClipboardData(payload, type, metadata), source,
-                    encrypted ? "ccb1" : "legacy");
+                    encrypted ? "ccb1" : "text".equals(type) ? "utf8" : "legacy");
         } catch (Exception failure) {
             historyFailure(failure);
         }
@@ -64,14 +65,22 @@ public class ClipboardIngestionService {
                 record(username, data, source, format);
                 return;
             }
-            // One logical update can have binary and legacy representations. Keep a bounded cache
-            // on this authenticated WebSocket session, never deduplicate different sessions/users.
+            // Retain only row IDs, scoped to this owner and WebSocket session. A duplicate
+            // may add explicit clear-text evidence, but must never replace the stored row.
             synchronized (attributes) {
                 @SuppressWarnings("unchecked")
-                LinkedHashSet<String> recorded = (LinkedHashSet<String>) attributes.get(RECORDED_IDS);
-                if (recorded != null && recorded.contains(transferId)) return;
+                LinkedHashMap<TransferKey, Long> recorded =
+                        (LinkedHashMap<TransferKey, Long>) attributes.get(RECORDED_IDS);
+                TransferKey key = new TransferKey(username, source.getSessionId(), transferId);
+                if (recorded != null && recorded.containsKey(key)) {
+                    Long historyId = recorded.get(key);
+                    if (historyId != null && "utf8".equals(format) && "text".equals(data.getType())) {
+                        clipboardHistoryService.upgradeLegacyText(historyId, username, data.getPayload());
+                    }
+                    return;
+                }
                 if (recorded == null) {
-                    recorded = new LinkedHashSet<>();
+                    recorded = new LinkedHashMap<>();
                     try {
                         attributes.put(RECORDED_IDS, recorded);
                     } catch (UnsupportedOperationException immutableTestOrCustomSession) {
@@ -79,9 +88,9 @@ public class ClipboardIngestionService {
                         return;
                     }
                 }
-                record(username, data, source, format);
-                recorded.add(transferId);
-                while (recorded.size() > MAX_RECENT_IDS) recorded.remove(recorded.iterator().next());
+                ClipboardHistory saved = record(username, data, source, format);
+                recorded.put(key, saved == null ? null : saved.getId());
+                while (recorded.size() > MAX_RECENT_IDS) recorded.remove(recorded.keySet().iterator().next());
             }
         } catch (Exception failure) {
             // History remains best-effort and must not interrupt clipboard delivery.
@@ -95,7 +104,7 @@ public class ClipboardIngestionService {
                 .warn("Clipboard history recording failed ({})", failure.getClass().getSimpleName());
     }
 
-    private void record(String username, ClipboardData data, SimpMessageHeaderAccessor headerAccessor, String format) {
+    private ClipboardHistory record(String username, ClipboardData data, SimpMessageHeaderAccessor headerAccessor, String format) {
         String deviceId = null;
         String deviceType = null;
         String osInfo = null;
@@ -170,9 +179,9 @@ public class ClipboardIngestionService {
         }
 
         if ("legacy".equals(format)) {
-            clipboardHistoryService.recordClipboard(username, deviceId, data);
+            return clipboardHistoryService.recordClipboard(username, deviceId, data);
         } else {
-            clipboardHistoryService.recordClipboard(username, deviceId, data, format);
+            return clipboardHistoryService.recordClipboard(username, deviceId, data, format);
         }
     }
 

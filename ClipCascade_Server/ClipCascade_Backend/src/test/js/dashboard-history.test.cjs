@@ -9,6 +9,7 @@ function dashboard() {
   const requests = [];
   function element() {
     return { value: '', textContent: '', disabled: false, style: {},
+      classList: { add() {}, remove() {} },
       set innerHTML(value) { this.html = value; },
       get innerHTML() {
         return this.html ?? this.textContent.replaceAll('&', '&amp;').replaceAll('<', '&lt;')
@@ -73,4 +74,34 @@ test('opaque encrypted history has no image probe and cannot copy ciphertext as 
   context.item = { payloadType: 'text', payloadFormat: 'ccb1', payload: 'opaque-frame' };
   await vm.runInContext('currentViewItem = item; copyToClipboard()', context);
   assert.deepEqual(alerts, ['Encrypted content cannot be copied as plaintext. Use Download.']);
+});
+
+test('explicit utf8 history previews Base64-looking text and escapes markup', async () => {
+  for (const payload of ['A'.repeat(200), 'A'.repeat(200) + '<script>bad()</script>']) {
+    const { context, elements } = dashboard();
+    context.fetchAPI = async () => ({ id: 123, payloadType: 'text', payloadFormat: 'utf8',
+      payload, createdAt: 0 });
+    await vm.runInContext('viewItem(123)', context);
+    const body = elements.get('modal-body').innerHTML;
+    assert.match(body, /<pre id="modal-text-content">A{200}/);
+    assert.doesNotMatch(body, /File preview not available|<script>bad/);
+    if (payload.includes('<script>')) assert.match(body, /&lt;script&gt;bad/);
+    assert.equal(elements.get('btn-download').style.display, 'none');
+  }
+});
+
+test('legacy and opaque history keep their existing preview policies', async () => {
+  for (const payloadFormat of ['legacy', undefined, 'ccb1']) {
+    const { context, elements } = dashboard();
+    context.fetchAPI = async () => ({ id: 123, payloadType: 'text', payloadFormat,
+      payload: 'A'.repeat(200), createdAt: 0 });
+    await vm.runInContext('viewItem(123)', context);
+    const body = elements.get('modal-body');
+    if (payloadFormat === 'ccb1') {
+      assert.match(body.textContent, /Encrypted clipboard content/);
+    } else {
+      assert.match(body.innerHTML, /File preview not available/);
+    }
+    assert.equal(elements.get('btn-download').style.display, 'inline-block');
+  }
 });

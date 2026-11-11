@@ -46,6 +46,13 @@ public class ClipboardHistoryService {
         return clipboardHistoryRepo.save(history);
     }
 
+    /** Explicit clear-binary evidence may disambiguate only the exact legacy text row. */
+    @Transactional
+    public boolean upgradeLegacyText(Long id, String username, String payload) {
+        // Update one column directly: saving a previously read entity could undo a concurrent pin.
+        return clipboardHistoryRepo.upgradeLegacyText(id, username, payload) == 1;
+    }
+
     public Page<ClipboardHistory> searchHistory(
             String username,
             String deviceId,

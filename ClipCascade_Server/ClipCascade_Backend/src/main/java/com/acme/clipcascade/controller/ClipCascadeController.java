@@ -1046,7 +1046,9 @@ public class ClipCascadeController {
         String extension = "bin";
 
         if ("text".equals(payloadType)) {
-            if (looksLikeBase64(payload)) {
+            // Explicit clear CCB1 text is UTF-8 even when its spelling resembles Base64.
+            // Retain the historical heuristic only for ambiguous legacy records.
+            if ("legacy".equals(item.getPayloadFormat()) && looksLikeBase64(payload)) {
                 byte[] decoded = safeBase64Decode(payload);
                 return new DecodedPayload(decoded, contentType,
                         "clipboard-" + item.getId() + "." + extension);

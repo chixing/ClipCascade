@@ -1003,7 +1003,8 @@
           } else if (payloadType === 'files') {
             renderFilesList(body, item);
             downloadBtn.style.display = 'none';
-          } else if (payloadType !== 'text' || looksLikeBase64(item.payload || '')) {
+          } else if (payloadType !== 'text' ||
+              (item.payloadFormat !== 'utf8' && looksLikeBase64(item.payload || ''))) {
             body.innerHTML = `<div>File preview not available. Use Download to save the file.</div>`;
             downloadBtn.style.display = 'inline-block';
           } else {

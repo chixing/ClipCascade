@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS clipboard_history (
     device_id VARCHAR(64),                         -- Device that sent this clipboard data
     payload_type VARCHAR(50) NOT NULL,             -- text, image, file
     payload CLOB,                                  -- Full clipboard content (CLOB for large text)
-    payload_format VARCHAR(16) NOT NULL DEFAULT 'legacy', -- legacy text or opaque encrypted CCB1 frame
+    payload_format VARCHAR(16) NOT NULL DEFAULT 'legacy', -- legacy, explicit utf8 text, or opaque encrypted CCB1 frame
     payload_size BIGINT,                           -- Size of payload in bytes
     created_at BIGINT NOT NULL,                    -- Timestamp when clipboard was captured
     pinned BOOLEAN NOT NULL DEFAULT FALSE          -- Preserved by automatic and bulk cleanup

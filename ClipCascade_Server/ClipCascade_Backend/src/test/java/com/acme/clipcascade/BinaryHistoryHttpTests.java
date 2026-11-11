@@ -71,7 +71,7 @@ class BinaryHistoryHttpTests {
         var items = history.getRecentHistory(owner.username());
         assertThat(items).hasSize(1);
         var entry = items.getFirst();
-        assertThat(entry.getPayloadFormat()).isEqualTo("legacy");
+        assertThat(entry.getPayloadFormat()).isEqualTo(type.equals("text") ? "utf8" : "legacy");
         assertThat(entry.getDeviceId()).isNotBlank();
         if (type.equals("text")) assertThat(entry.getPayload()).isEqualTo(new String(content, StandardCharsets.UTF_8));
         if (type.equals("image")) assertThat(Base64.getDecoder().decode(entry.getPayload())).isEqualTo(content);
@@ -86,6 +86,40 @@ class BinaryHistoryHttpTests {
         // Paired legacy delivery from the same client has the same logical transfer ID.
         ingestion.recordLegacy(owner.username(), new ClipboardData(entry.getPayload(), type, metadata), source);
         assertThat(history.countForUser(owner.username())).isEqualTo(1);
+    }
+
+    @Test
+    void clearBinaryBase64LookingTextDownloadsAsOriginalUtf8Bytes() throws Exception {
+        var owner = TestHttpClient.login(users, port, RoleConstants.ADMIN);
+        byte[] content = "A".repeat(200).getBytes(StandardCharsets.UTF_8);
+        var metadata = Map.<String, Object>of("deviceId", "clear-text-device",
+                "contentSizeBytes", content.length);
+        byte[] frame = frame(Map.of("type", "text", "encrypted", false, "metadata", metadata),
+                frame(Map.of("type", "text"), content));
+        binary.send(() -> owner.username(), frame, source());
+
+        var entry = history.getRecentHistory(owner.username()).getFirst();
+        assertThat(entry.getPayloadFormat()).isEqualTo("utf8");
+        assertThat(entry.getPayload()).isEqualTo("A".repeat(200));
+        var download = bytes(owner, "/admin/clipboard-history/" + entry.getId() + "/download");
+        assertThat(download.statusCode()).isEqualTo(200);
+        assertThat(download.body()).isEqualTo(content);
+        assertThat(download.headers().firstValue("Content-Type").orElseThrow()).startsWith("text/plain");
+        assertThat(download.headers().firstValue("Content-Disposition").orElseThrow()).contains(".txt");
+    }
+
+    @Test
+    void historicalLegacyBase64TextRetainsItsDownloadRepresentation() throws Exception {
+        var owner = TestHttpClient.login(users, port, RoleConstants.ADMIN);
+        byte[] content = new byte[150];
+        var entry = history.recordClipboard(owner.username(), "legacy-device",
+                new ClipboardData(Base64.getEncoder().encodeToString(content), "text", Map.of()));
+        assertThat(entry.getPayloadFormat()).isEqualTo("legacy");
+        var download = bytes(owner, "/admin/clipboard-history/" + entry.getId() + "/download");
+        assertThat(download.statusCode()).isEqualTo(200);
+        assertThat(download.body()).isEqualTo(content);
+        assertThat(download.headers().firstValue("Content-Type").orElseThrow())
+                .startsWith("application/octet-stream");
     }
 
     @Test

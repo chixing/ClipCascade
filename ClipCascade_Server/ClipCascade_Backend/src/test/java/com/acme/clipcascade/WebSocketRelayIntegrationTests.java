@@ -157,6 +157,47 @@ class WebSocketRelayIntegrationTests {
         assertQuiet(survivor);
     }
 
+    @Test
+    void legacyFirstPairOnOneAuthenticatedSocketPreservesTheExactHttpDownload() throws Exception {
+        TestHttpClient owner = TestHttpClient.login(users, port, RoleConstants.ADMIN);
+        Peer sender = connect(owner, true);
+        Peer target = connect(owner, true);
+        String targetId = recipientId(owner, target);
+        String transfer = UUID.randomUUID().toString();
+        String content = "A".repeat(200);
+        var metadata = Map.of("historyTransferId", transfer, "contentSizeBytes", 200);
+        send(sender, "/app/cliptext", json.writeValueAsBytes(Map.of(
+                "payload", content, "type", "text", "metadata", metadata)), targetId);
+        assertThat(json.readTree(receive(target)).path("payload").asText()).isEqualTo(content);
+        JsonNode beforePage = json.readTree(owner.get("/admin/clipboard-history").body());
+        assertThat(beforePage.path("totalElements").asInt()).isEqualTo(1);
+        JsonNode before = beforePage.path("content").get(0);
+        assertThat(before.path("payloadFormat").asText()).isEqualTo("legacy");
+        String path = "/admin/clipboard-history/" + before.path("id").asLong() + "/download";
+        // Legacy ambiguity remains until the same socket supplies explicit clear-text evidence.
+        var ambiguous = owner.client().send(HttpRequest.newBuilder(owner.url(path)).GET().build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(ambiguous.statusCode()).isEqualTo(200);
+        assertThat(ambiguous.body()).isEqualTo(new byte[150]);
+        byte[] clear = binaryFrame(Map.of("type", "text", "encrypted", false, "metadata", metadata),
+                binaryFrame(Map.of("type", "text"), content.getBytes(StandardCharsets.UTF_8)));
+        send(sender, "/app/clipbinary", clear, targetId);
+        assertThat(receive(target)).containsExactly(clear);
+        JsonNode afterPage = json.readTree(owner.get("/admin/clipboard-history").body());
+        assertThat(afterPage.path("totalElements").asInt()).isEqualTo(1);
+        JsonNode after = afterPage.path("content").get(0);
+        var download = owner.client().send(HttpRequest.newBuilder(owner.url(path)).GET().build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(download.statusCode()).isEqualTo(200);
+        assertThat(download.body()).isEqualTo(content.getBytes(StandardCharsets.UTF_8));
+        assertThat(after.path("payloadFormat").asText()).isEqualTo("utf8");
+        for (String field : List.of("id", "username", "deviceId", "createdAt", "payload", "payloadSize", "pinned"))
+            assertThat(after.path(field)).as("preserved history field %s", field).isEqualTo(before.path(field));
+        assertThat(sender.session.isConnected()).isTrue();
+        assertThat(target.session.isConnected()).isTrue();
+        assertThat(owner.get("/whoami").body()).contains(owner.username());
+    }
+
     private Peer connect(TestHttpClient browser, boolean modern) throws Exception {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
         client.setDefaultHeartbeat(new long[] { 0, 0 });
